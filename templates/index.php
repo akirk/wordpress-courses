@@ -157,7 +157,7 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php wp_app_title( 'WordPress Courses' ); ?></title>
+    <title><?php echo esc_html( wp_app_title( 'WordPress Courses' ) ); ?></title>
     <?php wp_app_head(); ?>
     <style>
         :root { color-scheme: light dark; }
@@ -182,6 +182,7 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
         }
         h1, h2, h3, p { margin-top: 0; }
         h1 { margin-bottom: 4px; font-size: 2rem; line-height: 1.15; }
+        h1 a { color: inherit; text-decoration: none; }
         h2 { margin-bottom: 12px; font-size: 1.2rem; }
         h3 { margin-bottom: 8px; font-size: 1rem; }
         .muted { color: var(--wp-app-color-muted); }
@@ -436,7 +437,7 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
     <main>
         <header class="page-header">
             <div>
-                <h1><?php echo esc_html__( 'WordPress Courses', 'wordpress-courses' ); ?></h1>
+                <h1><a href="<?php echo esc_url( home_url( '/wordpress-courses/' ) ); ?>"><?php echo esc_html__( 'WordPress Courses', 'wordpress-courses' ); ?></a></h1>
                 <p class="muted"><?php echo esc_html__( 'Choose the Learn WordPress course you joined and track your own study progress here.', 'wordpress-courses' ); ?></p>
             </div>
         </header>

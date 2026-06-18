@@ -1,87 +1,91 @@
 # WordPress Courses
 
-A WordPress app powered by [WpApp](https://github.com/akirk/wp-app), intended to become a personalized helper for students using [Learn WordPress](https://learn.wordpress.org/).
+A personal study helper for [Learn WordPress](https://learn.wordpress.org/) courses. It runs as a WpApp at `/wordpress-courses/` and stores each student's course plans in WordPress.
 
-## Product direction
+The prototype is aimed at WordPress Credits students who need more structure than a plain course page: selected courses, start/end dates, progress, and a clear checklist of lessons to complete.
 
-Students in the WordPress Credits program need more guidance and structure than the Learn WordPress site provides on its own. The first version should behave like a study guide layered over Learn WordPress content:
+Built on the [WpApp framework](https://github.com/akirk/wp-app), so the app lives outside the active theme while still using WordPress users, capabilities, post storage, transients, nonces, and AJAX.
 
-- Pick a course or learning path.
-- Set a start date and target end date.
-- Generate a dated plan from the course lessons.
-- Maintain an integrated to-do list for each student.
-- Track local completion and optionally sync with Learn WordPress when authenticated access is confirmed.
+## Features
 
-## Learn WordPress API notes
+- **Learn WordPress course search.** Reads public Learn WordPress REST API course data from `https://learn.wordpress.org/wp-json/`.
+- **Course plans as posts.** Each active course is a published `wp_course_plan` custom post authored by the current user. Trashing the post removes the course from the active list.
+- **Multiple active courses.** `/wordpress-courses/` shows all active course plans when the user has more than one. If the user has one course, that course opens directly.
+- **Course view.** `?plan_id={id}` opens one course plan with a module/lesson checklist loaded from Learn WordPress Sensei course structure.
+- **Autosaved progress.** Checking or unchecking lessons saves immediately through authenticated WordPress AJAX and updates the course progress summary in the sidebar.
+- **Dates and pacing.** New course plans default to a start date of the day the plan was created and an end date 30 days later. The user can edit dates from the course sidebar.
+- **Progress summaries.** Course cards show completion percentage, lessons left, and days left until the target end date.
+- **Undo remove.** Removing a course trashes the plan post and shows an undo action on the next page.
+- **No Learn auth required.** The current useful flow reads public Learn WordPress content and stores personalization locally.
 
-Learn WordPress exposes a public WordPress REST API at:
+## Install
 
-- `https://learn.wordpress.org/wp-json/`
+```bash
+cd wp-content/plugins
+git clone <this-repo> wordpress-courses
+cd wordpress-courses
+composer install
+```
 
-Useful public content endpoints discovered on 2026-06-17:
+Activate **WordPress Courses** in WordPress and visit `/wordpress-courses/`.
+
+## Usage
+
+| URL | Page |
+| --- | --- |
+| `/wordpress-courses/` | Course search, active-course overview, or the single active course |
+| `/wordpress-courses/?course_search=credits` | Full-page Learn WordPress course search |
+| `/wordpress-courses/?plan_id={id}` | One course plan with lesson checklist and sidebar progress |
+
+## Storage
+
+Course plans are stored as `wp_course_plan` posts:
+
+- `post_author`: the student/user who owns the plan
+- `post_status=publish`: active course
+- `post_status=trash`: removed course
+- `_wordpress_courses_course_id`: Learn WordPress course ID
+- `_wordpress_courses_completed_lesson_ids`: completed Learn lesson IDs
+- `_wordpress_courses_start_date`: `Y-m-d`
+- `_wordpress_courses_end_date`: `Y-m-d`
+
+Learn API responses are cached with WordPress transients to avoid hitting Learn WordPress on every request.
+
+## Learn WordPress API Notes
+
+Useful public endpoints discovered during prototyping:
 
 - `wp/v2/courses`
 - `wp/v2/lessons`
-- `wp/v2/lesson-plan`
-- `wp/v2/wporg_workshop`
+- `sensei-internal/v1/course-structure/{course_id}`
 - `wp/v2/course-category`
 - `wp/v2/audience`
 - `wp/v2/level`
 - `wp/v2/topic`
 - `wp/v2/learning-pathway`
 
-Course and lesson payloads expose enough metadata for a local planning MVP:
+The Learn WordPress REST index advertises Application Passwords, but authenticated student capabilities still need validation. The prototype intentionally does not depend on Learn WordPress authentication.
 
-- Courses include title, excerpt, permalink, taxonomy terms, `_duration`, start/expiration settings, and Sensei course metadata.
-- Lessons include title, permalink, `_lesson_course`, `_lesson_length`, `_duration`, `_lesson_complexity`, quiz flags, preview flags, and video metadata.
+## Architecture
 
-The REST index advertises WordPress Application Passwords:
+```
+wordpress-courses.php  Plugin bootstrap
+src/App.php            WpApp setup, course-plan CPT, Learn API client, AJAX progress saves
+templates/index.php    Main app view, course search, overview, course checklist, sidebar
+```
 
-- Authorization URL: `https://learn.wordpress.org/wp-admin/authorize-application.php`
-- WordPress REST API auth reference: `https://developer.wordpress.org/rest-api/using-the-rest-api/authentication/`
+## Playground
 
-Application Passwords use HTTPS Basic Auth for remote REST requests. That likely works for authenticated requests as a WordPress.org user, but the exact permissions available to normal students still need to be tested with a real account.
+The included `blueprint.json` installs the plugin from the repository's `dist/main` branch, matching the dist branch generated by the GitHub workflow.
 
-Potential authenticated integration points discovered in the REST route index:
+## Standards
 
-- `wp/v2/users/me`
-- `wp/v2/users/me/application-passwords`
-- `wporg/v1/favorite`
-- `sensei-internal/v1/course-structure/{course_id}`
-- `sensei-internal/v1/course-progress/batch`
-- `sensei-internal/v1/lesson-quiz/{lesson_id}`
-- `sensei-pro-student-groups/v1/groups/{group_id}/courses`
+```bash
+php -l wordpress-courses.php
+php -l src/App.php
+php -l templates/index.php
+```
 
-Treat the `sensei-internal/*` and `sensei-pro-student-groups/*` routes as experimental until permission checks are verified. They may require elevated Learn/Sensei capabilities and should not block the student helper MVP.
+## License
 
-## Recommended MVP
-
-Build the first version as a local planning layer that reads public Learn content and stores personalization in this WordPress site.
-
-Data model:
-
-- Store synced Learn courses/lessons as cached records or transients.
-- Store per-user plans in user meta or a private custom post type.
-- Store per-user task completion locally first.
-- Store optional Learn credentials encrypted or avoid storing them by requiring reconnect-on-demand.
-
-Core workflow:
-
-1. Student searches/selects a Learn course.
-2. Student enters start date, end date, and weekly availability.
-3. The plugin fetches course lessons and estimates workload from lesson length/duration metadata.
-4. The plugin creates a dated checklist grouped by week.
-5. Student marks items complete locally.
-6. Later: add authenticated sync if Learn exposes student progress/favorites with normal account permissions.
-
-## Auth decision
-
-Do not make Learn authentication a prerequisite for the first useful version.
-
-Use public REST reads for catalog, course, and lesson structure. Add an optional "Connect Learn WordPress" step only after validating these questions with a real WordPress.org account:
-
-- Can a student create an Application Password on `learn.wordpress.org`?
-- Does `wp/v2/users/me` work with that credential?
-- Does `sensei-internal/v1/course-structure/{course_id}` return useful structure for enrolled courses?
-- Does `sensei-internal/v1/course-progress/batch` expose student progress to the current user?
-- Are write routes available to normal students, or only to Learn administrators/group managers?
+GPL-2.0-or-later
