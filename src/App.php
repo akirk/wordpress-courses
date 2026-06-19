@@ -33,7 +33,7 @@ class App extends BaseApp {
             'app_name'            => $this->get_plugin_name(),
             'app_name_textdomain' => 'wordpress-courses',
             // 'my_apps'             => true,
-            // 'my_apps_icon'        => null,
+            'my_apps_icon'        => 'dashicons-welcome-learn-more',
         ] );
 
         add_action( 'init', [ $this, 'register_post_types' ] );
