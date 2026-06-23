@@ -138,6 +138,40 @@ class CoursePlans {
         return true;
     }
 
+    public static function get_plan_notes( int $user_id, int $plan_id ): string {
+        if ( ! self::user_can_use_plan( $user_id, $plan_id ) ) {
+            return '';
+        }
+
+        return wp_kses_post( get_post_field( 'post_content', $plan_id, 'raw' ) );
+    }
+
+    public static function get_plan_notes_editor_text( int $user_id, int $plan_id ): string {
+        return self::content_to_editor_text( self::get_plan_notes( $user_id, $plan_id ) );
+    }
+
+    public static function set_plan_notes( int $user_id, int $plan_id, string $notes ) {
+        if ( ! self::user_can_use_plan( $user_id, $plan_id ) ) {
+            return new \WP_Error( 'invalid_plan', __( 'You cannot edit that course plan.', 'learn-app' ) );
+        }
+
+        $notes_html = self::markdown_to_html( $notes );
+
+        $result = wp_update_post(
+            [
+                'ID'           => $plan_id,
+                'post_content' => wp_slash( wp_kses_post( $notes_html ) ),
+            ],
+            true
+        );
+
+        if ( is_wp_error( $result ) ) {
+            return $result;
+        }
+
+        return true;
+    }
+
     public static function trash_plan( int $user_id, int $plan_id ): void {
         if ( self::user_can_use_plan( $user_id, $plan_id ) ) {
             wp_trash_post( $plan_id );
@@ -215,6 +249,302 @@ class CoursePlans {
         }
 
         return (int) round( ( ( $now - $start ) / ( $end - $start ) ) * 100 );
+    }
+
+    private static function markdown_to_html( string $markdown ): string {
+        $markdown = str_replace( "\r\n", "\n", trim( $markdown ) );
+
+        if ( '' === $markdown ) {
+            return '';
+        }
+
+        $lines   = explode( "\n", $markdown );
+        $blocks  = [];
+        $para    = [];
+        $list    = [];
+        $ordered = false;
+        $quote   = [];
+        $code    = [];
+        $in_code = false;
+
+        $flush_para = static function () use ( &$blocks, &$para ): void {
+            if ( [] === $para ) {
+                return;
+            }
+
+            $blocks[] = '<p>' . self::markdown_inline_to_html( implode( '<br>', $para ) ) . '</p>';
+            $para     = [];
+        };
+        $flush_list = static function () use ( &$blocks, &$list, &$ordered ): void {
+            if ( [] === $list ) {
+                return;
+            }
+
+            $tag      = $ordered ? 'ol' : 'ul';
+            $items    = array_map(
+                static function ( string $item ): string {
+                    return '<li>' . self::markdown_inline_to_html( $item ) . '</li>';
+                },
+                $list
+            );
+            $blocks[] = '<' . $tag . '>' . implode( '', $items ) . '</' . $tag . '>';
+            $list     = [];
+            $ordered  = false;
+        };
+        $flush_quote = static function () use ( &$blocks, &$quote ): void {
+            if ( [] === $quote ) {
+                return;
+            }
+
+            $blocks[] = '<blockquote><p>' . self::markdown_inline_to_html( implode( '<br>', $quote ) ) . '</p></blockquote>';
+            $quote    = [];
+        };
+
+        foreach ( $lines as $line ) {
+            if ( preg_match( '/^```/', $line ) ) {
+                if ( $in_code ) {
+                    $blocks[] = '<pre><code>' . esc_html( rtrim( implode( "\n", $code ), "\n" ) ) . '</code></pre>';
+                    $code     = [];
+                    $in_code  = false;
+                } else {
+                    $flush_para();
+                    $flush_list();
+                    $flush_quote();
+                    $in_code = true;
+                }
+                continue;
+            }
+
+            if ( $in_code ) {
+                $code[] = $line;
+                continue;
+            }
+
+            if ( '' === trim( $line ) ) {
+                $flush_para();
+                $flush_list();
+                $flush_quote();
+                continue;
+            }
+
+            if ( preg_match( '/^\s*(#{1,6})\s+(.+)$/', $line, $heading ) ) {
+                $flush_para();
+                $flush_list();
+                $flush_quote();
+                $level    = strlen( $heading[1] );
+                $blocks[] = '<h' . $level . '>' . self::markdown_inline_to_html( trim( $heading[2] ) ) . '</h' . $level . '>';
+                continue;
+            }
+
+            if ( preg_match( '/^\s*---+\s*$/', $line ) ) {
+                $flush_para();
+                $flush_list();
+                $flush_quote();
+                $blocks[] = '<hr>';
+                continue;
+            }
+
+            if ( preg_match( '/^\s*[-*]\s+(.+)$/', $line, $item ) ) {
+                $flush_para();
+                $flush_quote();
+                if ( $ordered ) {
+                    $flush_list();
+                }
+                $list[]  = trim( $item[1] );
+                $ordered = false;
+                continue;
+            }
+
+            if ( preg_match( '/^\s*\d+\.\s+(.+)$/', $line, $item ) ) {
+                $flush_para();
+                $flush_quote();
+                if ( [] !== $list && ! $ordered ) {
+                    $flush_list();
+                }
+                $list[]  = trim( $item[1] );
+                $ordered = true;
+                continue;
+            }
+
+            if ( preg_match( '/^\s*>\s?(.*)$/', $line, $quoted ) ) {
+                $flush_para();
+                $flush_list();
+                $quote[] = $quoted[1];
+                continue;
+            }
+
+            $flush_list();
+            $flush_quote();
+            $para[] = trim( $line );
+        }
+
+        if ( $in_code ) {
+            $blocks[] = '<pre><code>' . esc_html( rtrim( implode( "\n", $code ), "\n" ) ) . '</code></pre>';
+        }
+        $flush_para();
+        $flush_list();
+        $flush_quote();
+
+        return implode( "\n\n", $blocks );
+    }
+
+    private static function markdown_inline_to_html( string $text ): string {
+        $text = esc_html( $text );
+        $text = preg_replace_callback(
+            '/`([^`]+)`/',
+            static function ( array $match ): string {
+                return '<code>' . $match[1] . '</code>';
+            },
+            $text
+        );
+        $text = preg_replace_callback(
+            '/\[(.*?)\]\((https?:\/\/[^)\s]+|mailto:[^)\s]+|ftp:\/\/[^)\s]+|\/[^)\s]*|#[^)\s]*|\?[^)\s]*|\.[^)\s]*)\)/',
+            static function ( array $match ): string {
+                $label = trim( wp_strip_all_tags( html_entity_decode( $match[1], ENT_QUOTES | ENT_HTML5, get_bloginfo( 'charset' ) ?: 'UTF-8' ) ) );
+                $url   = esc_url( html_entity_decode( $match[2], ENT_QUOTES | ENT_HTML5, get_bloginfo( 'charset' ) ?: 'UTF-8' ) );
+
+                if ( '' === $label || '' === $url ) {
+                    return $match[0];
+                }
+
+                return '<a href="' . $url . '">' . esc_html( $label ) . '</a>';
+            },
+            $text
+        );
+        $text = preg_replace( '/\*\*([^*]+)\*\*/', '<strong>$1</strong>', $text );
+        $text = preg_replace( '/(?<!\*)\*([^*]+)\*(?!\*)/', '<em>$1</em>', $text );
+        $text = preg_replace( '/__([^_]+)__/', '<strong>$1</strong>', $text );
+        $text = preg_replace( '/(?<!_)_([^_]+)_(?!_)/', '<em>$1</em>', $text );
+
+        return $text;
+    }
+
+    private static function content_to_editor_text( string $content ): string {
+        $markdown = self::html_to_editor_markdown( $content );
+
+        if ( '' !== $markdown ) {
+            return $markdown;
+        }
+
+        $content = preg_replace( '/<!--\s*\/?wp:[^>]*-->/', '', $content );
+        $content = preg_replace( '/<br\s*\/?>/i', "\n", $content );
+        $content = preg_replace( '/<\/(p|div|li|h[1-6])\s*>/i', "\n\n", $content );
+        $content = preg_replace( '/<hr\b[^>]*>/i', "\n\n---\n\n", $content );
+        $text    = wp_strip_all_tags( $content, true );
+        $text    = html_entity_decode( $text, ENT_QUOTES | ENT_HTML5, get_bloginfo( 'charset' ) ?: 'UTF-8' );
+        $text    = preg_replace( "/\n{3,}/", "\n\n", $text );
+
+        return trim( $text );
+    }
+
+    private static function html_to_editor_markdown( string $content ): string {
+        $content = preg_replace( '/<!--\s*\/?wp:[^>]*-->/', '', $content );
+        $content = trim( (string) $content );
+
+        if ( '' === $content ) {
+            return '';
+        }
+
+        $blocks  = [];
+        $offset  = 0;
+        $pattern = '/<(h[1-6]|p|ul|ol|blockquote|pre)\b([^>]*)>(.*?)<\/\1>|<hr\b[^>]*>/is';
+
+        if ( preg_match_all( $pattern, $content, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE ) ) {
+            foreach ( $matches as $match ) {
+                $raw_match = $match[0][0];
+                $position  = $match[0][1];
+                self::append_editor_html_fragment( $blocks, substr( $content, $offset, $position - $offset ) );
+                $offset = $position + strlen( $raw_match );
+
+                $tag = isset( $match[1][0] ) ? strtolower( $match[1][0] ) : '';
+                if ( '' === $tag && 0 === stripos( $raw_match, '<hr' ) ) {
+                    $blocks[] = '---';
+                    continue;
+                }
+
+                $inner = $match[3][0] ?? '';
+                if ( preg_match( '/^h([1-6])$/', $tag, $heading ) ) {
+                    $text = self::html_inline_to_markdown( $inner );
+                    if ( '' !== $text ) {
+                        $blocks[] = str_repeat( '#', (int) $heading[1] ) . ' ' . $text;
+                    }
+                    continue;
+                }
+
+                if ( 'p' === $tag ) {
+                    $text = self::html_inline_to_markdown( $inner );
+                    if ( '' !== $text ) {
+                        $blocks[] = $text;
+                    }
+                    continue;
+                }
+
+                if ( 'ul' === $tag || 'ol' === $tag ) {
+                    $items = [];
+                    if ( preg_match_all( '/<li\b[^>]*>(.*?)<\/li>/is', $inner, $li_matches ) ) {
+                        foreach ( $li_matches[1] as $index => $li ) {
+                            $text = self::html_inline_to_markdown( $li );
+                            if ( '' !== $text ) {
+                                $items[] = ( 'ol' === $tag ? ( $index + 1 ) . '. ' : '- ' ) . $text;
+                            }
+                        }
+                    }
+                    if ( [] !== $items ) {
+                        $blocks[] = implode( "\n", $items );
+                    }
+                    continue;
+                }
+
+                if ( 'blockquote' === $tag ) {
+                    $text = self::html_inline_to_markdown( $inner );
+                    if ( '' !== $text ) {
+                        $blocks[] = '> ' . str_replace( "\n", "\n> ", $text );
+                    }
+                    continue;
+                }
+
+                if ( 'pre' === $tag ) {
+                    $code     = html_entity_decode( wp_strip_all_tags( $inner ), ENT_QUOTES | ENT_HTML5, get_bloginfo( 'charset' ) ?: 'UTF-8' );
+                    $blocks[] = "```\n" . trim( $code, "\n" ) . "\n```";
+                }
+            }
+        }
+
+        self::append_editor_html_fragment( $blocks, substr( $content, $offset ) );
+        $markdown = trim( preg_replace( "/\n{3,}/", "\n\n", implode( "\n\n", $blocks ) ) );
+
+        return preg_replace( '/^([ \t]*)[\x{2013}\x{2014}][ \t]+/mu', '$1- ', $markdown );
+    }
+
+    private static function append_editor_html_fragment( array &$blocks, string $html ): void {
+        $html = trim( $html );
+
+        if ( '' !== $html ) {
+            $blocks[] = self::html_inline_to_markdown( $html );
+        }
+    }
+
+    private static function html_inline_to_markdown( string $html ): string {
+        $html = preg_replace( '/<br\s*\/?>/i', "\n", $html );
+        $html = preg_replace( '/<code\b[^>]*>(.*?)<\/code>/is', '`$1`', $html );
+        $html = preg_replace( '/<(strong|b)\b[^>]*>(.*?)<\/\1>/is', '**$2**', $html );
+        $html = preg_replace( '/<(em|i)\b[^>]*>(.*?)<\/\1>/is', '*$2*', $html );
+        $html = preg_replace_callback(
+            '/<a\b([^>]*)>(.*?)<\/a>/is',
+            static function ( array $match ): string {
+                if ( ! preg_match( '/\bhref\s*=\s*(["\'])(.*?)\1/i', $match[1], $href ) ) {
+                    return wp_strip_all_tags( $match[2] );
+                }
+
+                return '[' . wp_strip_all_tags( $match[2] ) . '](' . $href[2] . ')';
+            },
+            $html
+        );
+        $text = wp_strip_all_tags( $html, true );
+        $text = html_entity_decode( $text, ENT_QUOTES | ENT_HTML5, get_bloginfo( 'charset' ) ?: 'UTF-8' );
+        $text = preg_replace( "/[ \t]+\n/", "\n", $text );
+
+        return trim( $text );
     }
 
     private static function find_plan_id( int $user_id, int $course_id ): int {

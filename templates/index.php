@@ -112,6 +112,18 @@ if ( 'POST' === $_SERVER['REQUEST_METHOD'] ) {
         $selected_plan_id = $progress_plan_id;
         $selected_course_id = CoursePlans::get_plan_course_id( $user_id, $selected_plan_id );
         $notice = __( 'Progress saved.', 'learn-app' );
+    } elseif ( 'save_notes' === $action ) {
+        $notes_plan_id = isset( $_POST['plan_id'] ) ? absint( $_POST['plan_id'] ) : $selected_plan_id;
+        $notes         = isset( $_POST['notes'] ) ? wp_unslash( $_POST['notes'] ) : '';
+        $result        = CoursePlans::set_plan_notes( $user_id, $notes_plan_id, $notes );
+
+        if ( is_wp_error( $result ) ) {
+            $error = $result->get_error_message();
+        } else {
+            $selected_plan_id   = $notes_plan_id;
+            $selected_course_id = CoursePlans::get_plan_course_id( $user_id, $selected_plan_id );
+            $notice             = __( 'Notes saved.', 'learn-app' );
+        }
     }
 }
 
@@ -129,6 +141,7 @@ $selected_lesson_count = is_array( $selected_modules ) ? LearnApi::count_lessons
 $completed_count       = count( array_intersect( $completed_lesson_ids, $collect_lesson_ids( is_array( $selected_modules ) ? $selected_modules : [] ) ) );
 $lesson_progress       = $selected_lesson_count > 0 ? (int) round( ( $completed_count / $selected_lesson_count ) * 100 ) : 0;
 $plan_dates            = $selected_plan_id > 0 ? CoursePlans::get_plan_dates( $user_id, $selected_plan_id ) : [ 'start_date' => '', 'end_date' => '' ];
+$plan_notes_editor     = $selected_plan_id > 0 ? CoursePlans::get_plan_notes_editor_text( $user_id, $selected_plan_id ) : '';
 $time_progress         = CoursePlans::get_time_progress_percent( $plan_dates['start_date'], $plan_dates['end_date'] );
 $days_left             = '' !== $plan_dates['end_date'] ? (int) ceil( ( strtotime( $plan_dates['end_date'] . ' 23:59:59' ) - current_time( 'timestamp' ) ) / DAY_IN_SECONDS ) : 0;
 if ( $days_left > 1 ) {
@@ -160,6 +173,10 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo esc_html( wp_app_title( 'WordPress Learn' ) ); ?></title>
     <?php wp_app_head(); ?>
+    <?php if ( $selected_plan_id > 0 && $selected_course_id > 0 ) : ?>
+        <script src="<?php echo esc_url( plugins_url( 'assets/vendor/overtype/overtype.min.js', dirname( __DIR__ ) . '/learn-app.php' ) ); ?>"></script>
+        <script src="<?php echo esc_url( plugins_url( 'assets/wordpress-courses-notes.js', dirname( __DIR__ ) . '/learn-app.php' ) ); ?>"></script>
+    <?php endif; ?>
     <style>
         :root { color-scheme: light dark; }
         * { box-sizing: border-box; }
@@ -391,6 +408,57 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
             font: inherit;
             width: 100%;
         }
+        .notes-form {
+            display: grid;
+            gap: 10px;
+            padding-top: 12px;
+            border-top: 1px solid var(--wp-app-color-border);
+        }
+        .notes-editor {
+            display: none;
+            width: 100%;
+            min-height: 170px;
+            height: clamp(170px, 28vh, 360px);
+        }
+        .notes-editor.is-ready {
+            display: block;
+        }
+        .notes-source {
+            min-height: 170px;
+            padding: 10px;
+            border: 1px solid var(--wp-app-color-border);
+            border-radius: 4px;
+            background: var(--wp-app-color-surface-alt);
+            color: var(--wp-app-color-text);
+            font: 14px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+            resize: vertical;
+            width: 100%;
+        }
+        .notes-source-hidden {
+            display: none !important;
+        }
+        .notes-editor .overtype-container {
+            border: 1px solid var(--wp-app-color-border);
+            border-radius: 4px;
+            background: var(--wp-app-color-surface-alt);
+            overflow: hidden;
+            height: 100%;
+        }
+        .notes-editor .overtype-toolbar {
+            border-bottom: 1px solid var(--wp-app-color-border);
+        }
+        .notes-editor .overtype-toolbar-button {
+            border-radius: 3px;
+        }
+        .notes-editor .overtype-input,
+        .notes-editor .overtype-preview {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+        }
+        .notes-editor .overtype-stats {
+            border-top: 1px solid var(--wp-app-color-border);
+            color: var(--wp-app-color-muted);
+            font-size: 0.78rem;
+        }
         .module {
             padding: 16px 0;
             border-top: 1px solid var(--wp-app-color-border);
@@ -429,6 +497,9 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
             .course-item { grid-template-columns: 1fr; }
             .search-form { grid-template-columns: 1fr; }
             button, .button { width: 100%; }
+            .notes-editor .overtype-toolbar button {
+                width: auto;
+            }
         }
     </style>
 </head>
@@ -643,6 +714,15 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
                                 <button type="submit" class="secondary"><?php echo esc_html__( 'Save Dates', 'learn-app' ); ?></button>
                             </form>
                         </details>
+                        <form class="notes-form" method="post" action="<?php echo esc_url( add_query_arg( 'plan_id', $selected_plan_id, home_url( '/learn-app/' ) ) ); ?>" data-notes-form>
+                            <?php wp_nonce_field( 'wordpress_courses_action', 'wordpress_courses_nonce' ); ?>
+                            <input type="hidden" name="wordpress_courses_action" value="save_notes">
+                            <input type="hidden" name="plan_id" value="<?php echo esc_attr( $selected_plan_id ); ?>">
+                            <h3><?php echo esc_html__( 'Notes', 'learn-app' ); ?></h3>
+                            <div class="notes-editor" data-notes-editor></div>
+                            <textarea class="notes-source" name="notes" rows="8" data-notes-source aria-label="<?php echo esc_attr__( 'Course notes markdown', 'learn-app' ); ?>" placeholder="<?php echo esc_attr__( 'Add notes for this course.', 'learn-app' ); ?>"><?php echo esc_textarea( $plan_notes_editor ); ?></textarea>
+                            <button type="submit" class="secondary"><?php echo esc_html__( 'Save Notes', 'learn-app' ); ?></button>
+                        </form>
                         <?php if ( '' !== $selected_course['link'] ) : ?>
                             <a class="button secondary" href="<?php echo esc_url( $selected_course['link'] ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html__( 'Open on Learn', 'learn-app' ); ?></a>
                         <?php endif; ?>
@@ -745,6 +825,7 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
                     input.addEventListener('change', saveProgress);
                 });
             })();
+
         </script>
     <?php endif; ?>
 
