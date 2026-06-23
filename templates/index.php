@@ -1,5 +1,6 @@
 <?php
-use WordpressCourses\App;
+use WordpressCourses\CoursePlans;
+use WordpressCourses\LearnApi;
 
 $user_id            = get_current_user_id();
 $notice             = '';
@@ -24,29 +25,29 @@ $collect_lesson_ids = function ( array $modules ): array {
 $get_plan_progress = function ( array $plan ) use ( $user_id, $collect_lesson_ids ): array {
     $course_id = absint( $plan['course_id'] ?? 0 );
     $plan_id   = absint( $plan['id'] ?? 0 );
-    $modules   = $course_id > 0 ? App::get_course_modules( $course_id ) : [];
+    $modules   = $course_id > 0 ? LearnApi::get_course_modules( $course_id ) : [];
 
     if ( is_wp_error( $modules ) || ! is_array( $modules ) ) {
         $modules = [];
     }
 
-    $lesson_count          = App::count_lessons( $modules );
-    $completed_lesson_ids  = App::get_completed_lesson_ids( $user_id, $plan_id );
+    $lesson_count          = LearnApi::count_lessons( $modules );
+    $completed_lesson_ids  = CoursePlans::get_completed_lesson_ids( $user_id, $plan_id );
     $completed_count       = count( array_intersect( $completed_lesson_ids, $collect_lesson_ids( $modules ) ) );
     $lesson_progress       = $lesson_count > 0 ? (int) round( ( $completed_count / $lesson_count ) * 100 ) : 0;
-    $time_progress         = App::get_time_progress_percent( $plan['start_date'] ?? '', $plan['end_date'] ?? '' );
+    $time_progress         = CoursePlans::get_time_progress_percent( $plan['start_date'] ?? '', $plan['end_date'] ?? '' );
     $days_left             = ! empty( $plan['end_date'] ) ? (int) ceil( ( strtotime( $plan['end_date'] . ' 23:59:59' ) - current_time( 'timestamp' ) ) / DAY_IN_SECONDS ) : 0;
 
     if ( $days_left > 1 ) {
-        $time_status = sprintf( __( '%d days left', 'wordpress-courses' ), $days_left );
+        $time_status = sprintf( __( '%d days left', 'learn-app' ), $days_left );
     } elseif ( 1 === $days_left ) {
-        $time_status = __( '1 day left', 'wordpress-courses' );
+        $time_status = __( '1 day left', 'learn-app' );
     } elseif ( 0 === $days_left ) {
-        $time_status = __( 'Due today', 'wordpress-courses' );
+        $time_status = __( 'Due today', 'learn-app' );
     } elseif ( -1 === $days_left ) {
-        $time_status = __( '1 day overdue', 'wordpress-courses' );
+        $time_status = __( '1 day overdue', 'learn-app' );
     } else {
-        $time_status = sprintf( __( '%d days overdue', 'wordpress-courses' ), abs( $days_left ) );
+        $time_status = sprintf( __( '%d days overdue', 'learn-app' ), abs( $days_left ) );
     }
 
     return [
@@ -64,84 +65,84 @@ if ( 'POST' === $_SERVER['REQUEST_METHOD'] ) {
     $action = isset( $_POST['wordpress_courses_action'] ) ? sanitize_key( wp_unslash( $_POST['wordpress_courses_action'] ) ) : '';
 
     if ( ! isset( $_POST['wordpress_courses_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['wordpress_courses_nonce'] ) ), 'wordpress_courses_action' ) ) {
-        $error = __( 'That request could not be verified. Please try again.', 'wordpress-courses' );
+        $error = __( 'That request could not be verified. Please try again.', 'learn-app' );
     } elseif ( 'select_course' === $action ) {
         $course_id = isset( $_POST['course_id'] ) ? absint( $_POST['course_id'] ) : 0;
-        $plan_id   = App::get_or_create_plan_id( $user_id, $course_id );
+        $plan_id   = CoursePlans::get_or_create_plan_id( $user_id, $course_id );
 
         if ( $plan_id > 0 ) {
-            wp_safe_redirect( add_query_arg( 'plan_id', $plan_id, home_url( '/wordpress-courses/' ) ) );
+            wp_safe_redirect( add_query_arg( 'plan_id', $plan_id, home_url( '/learn-app/' ) ) );
             exit;
         }
 
-        $error = __( 'The course plan could not be created.', 'wordpress-courses' );
+        $error = __( 'The course plan could not be created.', 'learn-app' );
     } elseif ( 'clear_selection' === $action ) {
         $trashed_plan_id = $selected_plan_id;
-        App::trash_plan( $user_id, $selected_plan_id );
-        wp_safe_redirect( add_query_arg( 'trashed_plan_id', $trashed_plan_id, home_url( '/wordpress-courses/' ) ) );
+        CoursePlans::trash_plan( $user_id, $selected_plan_id );
+        wp_safe_redirect( add_query_arg( 'trashed_plan_id', $trashed_plan_id, home_url( '/learn-app/' ) ) );
         exit;
     } elseif ( 'undo_clear_selection' === $action ) {
         $restore_plan_id = isset( $_POST['plan_id'] ) ? absint( $_POST['plan_id'] ) : 0;
 
-        if ( App::restore_plan( $user_id, $restore_plan_id ) ) {
-            wp_safe_redirect( add_query_arg( 'plan_id', $restore_plan_id, home_url( '/wordpress-courses/' ) ) );
+        if ( CoursePlans::restore_plan( $user_id, $restore_plan_id ) ) {
+            wp_safe_redirect( add_query_arg( 'plan_id', $restore_plan_id, home_url( '/learn-app/' ) ) );
             exit;
         }
 
-        $error = __( 'The course could not be restored.', 'wordpress-courses' );
+        $error = __( 'The course could not be restored.', 'learn-app' );
     } elseif ( 'save_dates' === $action ) {
         $dates_plan_id = isset( $_POST['plan_id'] ) ? absint( $_POST['plan_id'] ) : $selected_plan_id;
         $start_date    = isset( $_POST['start_date'] ) ? sanitize_text_field( wp_unslash( $_POST['start_date'] ) ) : '';
         $end_date      = isset( $_POST['end_date'] ) ? sanitize_text_field( wp_unslash( $_POST['end_date'] ) ) : '';
-        $result        = App::set_plan_dates( $user_id, $dates_plan_id, $start_date, $end_date );
+        $result        = CoursePlans::set_plan_dates( $user_id, $dates_plan_id, $start_date, $end_date );
 
         if ( is_wp_error( $result ) ) {
             $error = $result->get_error_message();
         } else {
             $selected_plan_id   = $dates_plan_id;
-            $selected_course_id = App::get_plan_course_id( $user_id, $selected_plan_id );
-            $notice             = __( 'Course dates saved.', 'wordpress-courses' );
+            $selected_course_id = CoursePlans::get_plan_course_id( $user_id, $selected_plan_id );
+            $notice             = __( 'Course dates saved.', 'learn-app' );
         }
     } elseif ( 'save_progress' === $action ) {
         $progress_plan_id     = isset( $_POST['plan_id'] ) ? absint( $_POST['plan_id'] ) : $selected_plan_id;
         $completed_lesson_ids = isset( $_POST['completed_lessons'] ) && is_array( $_POST['completed_lessons'] )
             ? array_map( 'absint', wp_unslash( $_POST['completed_lessons'] ) )
             : [];
-        App::set_completed_lesson_ids( $user_id, $progress_plan_id, $completed_lesson_ids );
+        CoursePlans::set_completed_lesson_ids( $user_id, $progress_plan_id, $completed_lesson_ids );
         $selected_plan_id = $progress_plan_id;
-        $selected_course_id = App::get_plan_course_id( $user_id, $selected_plan_id );
-        $notice = __( 'Progress saved.', 'wordpress-courses' );
+        $selected_course_id = CoursePlans::get_plan_course_id( $user_id, $selected_plan_id );
+        $notice = __( 'Progress saved.', 'learn-app' );
     }
 }
 
-$active_plans = App::get_active_plans( $user_id );
+$active_plans = CoursePlans::get_active_plans( $user_id );
 
 if ( $selected_plan_id <= 0 && '' === $search && 1 === count( $active_plans ) ) {
     $selected_plan_id = absint( $active_plans[0]['id'] );
 }
 
-$selected_course_id = App::get_plan_course_id( $user_id, $selected_plan_id );
-$selected_course       = $selected_course_id > 0 ? App::get_course( $selected_course_id ) : null;
-$selected_modules      = $selected_course_id > 0 ? App::get_course_modules( $selected_course_id ) : [];
-$completed_lesson_ids  = App::get_completed_lesson_ids( $user_id, $selected_plan_id );
-$selected_lesson_count = is_array( $selected_modules ) ? App::count_lessons( $selected_modules ) : 0;
+$selected_course_id = CoursePlans::get_plan_course_id( $user_id, $selected_plan_id );
+$selected_course       = $selected_course_id > 0 ? LearnApi::get_course( $selected_course_id ) : null;
+$selected_modules      = $selected_course_id > 0 ? LearnApi::get_course_modules( $selected_course_id ) : [];
+$completed_lesson_ids  = CoursePlans::get_completed_lesson_ids( $user_id, $selected_plan_id );
+$selected_lesson_count = is_array( $selected_modules ) ? LearnApi::count_lessons( $selected_modules ) : 0;
 $completed_count       = count( array_intersect( $completed_lesson_ids, $collect_lesson_ids( is_array( $selected_modules ) ? $selected_modules : [] ) ) );
 $lesson_progress       = $selected_lesson_count > 0 ? (int) round( ( $completed_count / $selected_lesson_count ) * 100 ) : 0;
-$plan_dates            = $selected_plan_id > 0 ? App::get_plan_dates( $user_id, $selected_plan_id ) : [ 'start_date' => '', 'end_date' => '' ];
-$time_progress         = App::get_time_progress_percent( $plan_dates['start_date'], $plan_dates['end_date'] );
+$plan_dates            = $selected_plan_id > 0 ? CoursePlans::get_plan_dates( $user_id, $selected_plan_id ) : [ 'start_date' => '', 'end_date' => '' ];
+$time_progress         = CoursePlans::get_time_progress_percent( $plan_dates['start_date'], $plan_dates['end_date'] );
 $days_left             = '' !== $plan_dates['end_date'] ? (int) ceil( ( strtotime( $plan_dates['end_date'] . ' 23:59:59' ) - current_time( 'timestamp' ) ) / DAY_IN_SECONDS ) : 0;
 if ( $days_left > 1 ) {
-    $time_status = sprintf( __( '%d days left', 'wordpress-courses' ), $days_left );
+    $time_status = sprintf( __( '%d days left', 'learn-app' ), $days_left );
 } elseif ( 1 === $days_left ) {
-    $time_status = __( '1 day left', 'wordpress-courses' );
+    $time_status = __( '1 day left', 'learn-app' );
 } elseif ( 0 === $days_left ) {
-    $time_status = __( 'Due today', 'wordpress-courses' );
+    $time_status = __( 'Due today', 'learn-app' );
 } elseif ( -1 === $days_left ) {
-    $time_status = __( '1 day overdue', 'wordpress-courses' );
+    $time_status = __( '1 day overdue', 'learn-app' );
 } else {
-    $time_status = sprintf( __( '%d days overdue', 'wordpress-courses' ), abs( $days_left ) );
+    $time_status = sprintf( __( '%d days overdue', 'learn-app' ), abs( $days_left ) );
 }
-$courses               = ( 0 === $selected_course_id || '' !== $search ) ? App::get_courses( $search ) : [];
+$courses               = ( 0 === $selected_course_id || '' !== $search ) ? LearnApi::get_courses( $search ) : [];
 $other_plans           = array_values(
     array_filter(
         $active_plans,
@@ -157,7 +158,7 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo esc_html( wp_app_title( 'WordPress Courses' ) ); ?></title>
+    <title><?php echo esc_html( wp_app_title( 'WordPress Learn' ) ); ?></title>
     <?php wp_app_head(); ?>
     <style>
         :root { color-scheme: light dark; }
@@ -437,8 +438,8 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
     <main>
         <header class="page-header">
             <div>
-                <h1><a href="<?php echo esc_url( home_url( '/wordpress-courses/' ) ); ?>"><?php echo esc_html__( 'WordPress Courses', 'wordpress-courses' ); ?></a></h1>
-                <p class="muted"><?php echo esc_html__( 'Choose the Learn WordPress course you joined and track your own study progress here.', 'wordpress-courses' ); ?></p>
+                <h1><a href="<?php echo esc_url( home_url( '/learn-app/' ) ); ?>"><?php echo esc_html__( 'WordPress Learn', 'learn-app' ); ?></a></h1>
+                <p class="muted"><?php echo esc_html__( 'Choose the Learn WordPress course you joined and track your own study progress here.', 'learn-app' ); ?></p>
             </div>
         </header>
 
@@ -448,12 +449,12 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
 
         <?php if ( $trashed_plan_id > 0 ) : ?>
             <div class="notice">
-                <?php echo esc_html__( 'Course removed.', 'wordpress-courses' ); ?>
-                <form class="notice-form" method="post" action="<?php echo esc_url( home_url( '/wordpress-courses/' ) ); ?>">
+                <?php echo esc_html__( 'Course removed.', 'learn-app' ); ?>
+                <form class="notice-form" method="post" action="<?php echo esc_url( home_url( '/learn-app/' ) ); ?>">
                     <?php wp_nonce_field( 'wordpress_courses_action', 'wordpress_courses_nonce' ); ?>
                     <input type="hidden" name="wordpress_courses_action" value="undo_clear_selection">
                     <input type="hidden" name="plan_id" value="<?php echo esc_attr( $trashed_plan_id ); ?>">
-                    <button type="submit"><?php echo esc_html__( 'Undo', 'wordpress-courses' ); ?></button>
+                    <button type="submit"><?php echo esc_html__( 'Undo', 'learn-app' ); ?></button>
                 </form>
             </div>
         <?php endif; ?>
@@ -466,14 +467,14 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
             <section class="stack">
                 <?php if ( $selected_course_id > 0 ) : ?>
                     <div class="panel">
-                        <h2><?php echo esc_html__( 'Course Checklist', 'wordpress-courses' ); ?></h2>
+                        <h2><?php echo esc_html__( 'Course Checklist', 'learn-app' ); ?></h2>
 
                         <?php if ( is_wp_error( $selected_modules ) ) : ?>
                             <div class="error"><?php echo esc_html( $selected_modules->get_error_message() ); ?></div>
                         <?php elseif ( empty( $selected_modules ) ) : ?>
-                            <p class="muted"><?php echo esc_html__( 'No lessons were found for this course yet.', 'wordpress-courses' ); ?></p>
+                            <p class="muted"><?php echo esc_html__( 'No lessons were found for this course yet.', 'learn-app' ); ?></p>
                         <?php else : ?>
-                            <form id="course-progress-form" method="post" action="<?php echo esc_url( add_query_arg( 'plan_id', $selected_plan_id, home_url( '/wordpress-courses/' ) ) ); ?>" data-plan-id="<?php echo esc_attr( $selected_plan_id ); ?>">
+                            <form id="course-progress-form" method="post" action="<?php echo esc_url( add_query_arg( 'plan_id', $selected_plan_id, home_url( '/learn-app/' ) ) ); ?>" data-plan-id="<?php echo esc_attr( $selected_plan_id ); ?>">
                                 <?php wp_nonce_field( 'wordpress_courses_action', 'wordpress_courses_nonce' ); ?>
                                 <input type="hidden" name="wordpress_courses_action" value="save_progress">
                                 <input type="hidden" name="plan_id" value="<?php echo esc_attr( $selected_plan_id ); ?>">
@@ -511,19 +512,19 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
 
                 <?php if ( 0 === $selected_course_id && ! empty( $active_plans ) && '' === $search ) : ?>
                     <div class="panel">
-                        <h2><?php echo esc_html__( 'Your Courses', 'wordpress-courses' ); ?></h2>
+                        <h2><?php echo esc_html__( 'Your Courses', 'learn-app' ); ?></h2>
                         <div class="course-list">
                             <?php foreach ( $active_plans as $plan ) : ?>
                                 <?php $plan_progress = $get_plan_progress( $plan ); ?>
                                 <article class="course-item">
                                     <div>
-                                        <h3><a href="<?php echo esc_url( add_query_arg( 'plan_id', $plan['id'], home_url( '/wordpress-courses/' ) ) ); ?>"><?php echo esc_html( $plan['title'] ); ?></a></h3>
+                                        <h3><a href="<?php echo esc_url( add_query_arg( 'plan_id', $plan['id'], home_url( '/learn-app/' ) ) ); ?>"><?php echo esc_html( $plan['title'] ); ?></a></h3>
                                         <div class="course-meta">
                                             <span>
                                                 <?php
                                                 echo esc_html(
                                                     sprintf(
-                                                        __( '%1$d%% complete (%2$d lessons left) . %3$s until %4$s', 'wordpress-courses' ),
+                                                        __( '%1$d%% complete (%2$d lessons left) . %3$s until %4$s', 'learn-app' ),
                                                         $plan_progress['lesson_progress'],
                                                         $plan_progress['lessons_left'],
                                                         $plan_progress['time_status'],
@@ -542,16 +543,16 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
 
                 <?php if ( 0 === $selected_course_id && ( empty( $active_plans ) || '' !== $search ) ) : ?>
                     <div class="panel">
-                        <h2><?php echo esc_html__( 'Find Your Course', 'wordpress-courses' ); ?></h2>
-                        <form class="search-form" method="get" action="<?php echo esc_url( home_url( '/wordpress-courses/' ) ); ?>">
-                            <input type="search" name="course_search" value="<?php echo esc_attr( $search ); ?>" placeholder="<?php echo esc_attr__( 'Search Learn WordPress courses', 'wordpress-courses' ); ?>">
-                            <button type="submit"><?php echo esc_html__( 'Search', 'wordpress-courses' ); ?></button>
+                        <h2><?php echo esc_html__( 'Find Your Course', 'learn-app' ); ?></h2>
+                        <form class="search-form" method="get" action="<?php echo esc_url( home_url( '/learn-app/' ) ); ?>">
+                            <input type="search" name="course_search" value="<?php echo esc_attr( $search ); ?>" placeholder="<?php echo esc_attr__( 'Search Learn WordPress courses', 'learn-app' ); ?>">
+                            <button type="submit"><?php echo esc_html__( 'Search', 'learn-app' ); ?></button>
                         </form>
 
                         <?php if ( is_wp_error( $courses ) ) : ?>
                             <div class="error"><?php echo esc_html( $courses->get_error_message() ); ?></div>
                         <?php elseif ( empty( $courses ) ) : ?>
-                            <p class="muted"><?php echo esc_html__( 'No courses found.', 'wordpress-courses' ); ?></p>
+                            <p class="muted"><?php echo esc_html__( 'No courses found.', 'learn-app' ); ?></p>
                         <?php else : ?>
                             <div class="course-list">
                                 <?php foreach ( $courses as $course ) : ?>
@@ -562,20 +563,20 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
                                                 <p class="muted"><?php echo esc_html( $course['excerpt'] ); ?></p>
                                             <?php endif; ?>
                                             <div class="course-meta">
-                                                <span><?php echo esc_html( sprintf( __( 'Learn ID: %d', 'wordpress-courses' ), $course['id'] ) ); ?></span>
+                                                <span><?php echo esc_html( sprintf( __( 'Learn ID: %d', 'learn-app' ), $course['id'] ) ); ?></span>
                                                 <?php if ( $course['duration'] > 0 ) : ?>
-                                                    <span><?php echo esc_html( sprintf( __( 'Estimated %.1f hours', 'wordpress-courses' ), $course['duration'] ) ); ?></span>
+                                                    <span><?php echo esc_html( sprintf( __( 'Estimated %.1f hours', 'learn-app' ), $course['duration'] ) ); ?></span>
                                                 <?php endif; ?>
                                                 <?php if ( '' !== $course['link'] ) : ?>
-                                                    <a href="<?php echo esc_url( $course['link'] ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html__( 'View on Learn', 'wordpress-courses' ); ?></a>
+                                                    <a href="<?php echo esc_url( $course['link'] ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html__( 'View on Learn', 'learn-app' ); ?></a>
                                                 <?php endif; ?>
                                             </div>
                                         </div>
-                                        <form method="post" action="<?php echo esc_url( home_url( '/wordpress-courses/' ) ); ?>">
+                                        <form method="post" action="<?php echo esc_url( home_url( '/learn-app/' ) ); ?>">
                                             <?php wp_nonce_field( 'wordpress_courses_action', 'wordpress_courses_nonce' ); ?>
                                             <input type="hidden" name="wordpress_courses_action" value="select_course">
                                             <input type="hidden" name="course_id" value="<?php echo esc_attr( $course['id'] ); ?>">
-                                            <button type="submit"><?php echo esc_html__( 'Select', 'wordpress-courses' ); ?></button>
+                                            <button type="submit"><?php echo esc_html__( 'Select', 'learn-app' ); ?></button>
                                         </form>
                                     </article>
                                 <?php endforeach; ?>
@@ -589,26 +590,26 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
             <aside class="sidebar-stack">
                 <?php if ( $selected_course_id > 0 ) : ?>
                     <div class="panel">
-                        <h2><?php echo esc_html__( 'Your Course', 'wordpress-courses' ); ?></h2>
+                        <h2><?php echo esc_html__( 'Your Course', 'learn-app' ); ?></h2>
 
                         <?php if ( is_wp_error( $selected_course ) ) : ?>
                             <div class="error"><?php echo esc_html( $selected_course->get_error_message() ); ?></div>
                         <?php elseif ( empty( $selected_course_id ) || empty( $selected_course ) ) : ?>
-                            <p class="muted"><?php echo esc_html__( 'Select the course you joined on Learn WordPress.', 'wordpress-courses' ); ?></p>
+                            <p class="muted"><?php echo esc_html__( 'Select the course you joined on Learn WordPress.', 'learn-app' ); ?></p>
                         <?php else : ?>
                             <div class="selected-summary">
                         <div class="selected-header">
                             <h3><?php echo esc_html( $selected_course['title'] ); ?></h3>
-                            <form method="post" action="<?php echo esc_url( add_query_arg( 'plan_id', $selected_plan_id, home_url( '/wordpress-courses/' ) ) ); ?>">
+                            <form method="post" action="<?php echo esc_url( add_query_arg( 'plan_id', $selected_plan_id, home_url( '/learn-app/' ) ) ); ?>">
                                 <?php wp_nonce_field( 'wordpress_courses_action', 'wordpress_courses_nonce' ); ?>
                                 <input type="hidden" name="wordpress_courses_action" value="clear_selection">
-                                <button type="submit" class="icon-button" aria-label="<?php echo esc_attr__( 'Remove course', 'wordpress-courses' ); ?>">&times;</button>
+                                <button type="submit" class="icon-button" aria-label="<?php echo esc_attr__( 'Remove course', 'learn-app' ); ?>">&times;</button>
                             </form>
                         </div>
                         <div class="progress-row">
                             <div class="progress-label">
-                                <span><?php echo esc_html__( 'Lessons', 'wordpress-courses' ); ?></span>
-                                <span data-progress-summary><?php echo esc_html( sprintf( __( '%1$d of %2$d', 'wordpress-courses' ), $completed_count, $selected_lesson_count ) ); ?></span>
+                                <span><?php echo esc_html__( 'Lessons', 'learn-app' ); ?></span>
+                                <span data-progress-summary><?php echo esc_html( sprintf( __( '%1$d of %2$d', 'learn-app' ), $completed_count, $selected_lesson_count ) ); ?></span>
                             </div>
                             <div class="progress-meter" aria-hidden="true" data-progress-meter>
                                 <span style="width: <?php echo esc_attr( $lesson_progress ); ?>%"></span>
@@ -617,33 +618,33 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
                         <div class="progress-row">
                             <div class="progress-label">
                                 <span><?php echo esc_html( $time_status ); ?></span>
-                                <span><?php echo esc_html( sprintf( __( '%d%%', 'wordpress-courses' ), $time_progress ) ); ?></span>
+                                <span><?php echo esc_html( sprintf( __( '%d%%', 'learn-app' ), $time_progress ) ); ?></span>
                             </div>
                             <div class="progress-meter time" aria-hidden="true">
                                 <span style="width: <?php echo esc_attr( $time_progress ); ?>%"></span>
                             </div>
                         </div>
                         <details class="date-details">
-                            <summary><?php echo esc_html__( 'Edit Dates', 'wordpress-courses' ); ?></summary>
-                            <form class="date-form" method="post" action="<?php echo esc_url( add_query_arg( 'plan_id', $selected_plan_id, home_url( '/wordpress-courses/' ) ) ); ?>">
+                            <summary><?php echo esc_html__( 'Edit Dates', 'learn-app' ); ?></summary>
+                            <form class="date-form" method="post" action="<?php echo esc_url( add_query_arg( 'plan_id', $selected_plan_id, home_url( '/learn-app/' ) ) ); ?>">
                                 <?php wp_nonce_field( 'wordpress_courses_action', 'wordpress_courses_nonce' ); ?>
                                 <input type="hidden" name="wordpress_courses_action" value="save_dates">
                                 <input type="hidden" name="plan_id" value="<?php echo esc_attr( $selected_plan_id ); ?>">
                                 <div class="date-fields">
                                     <label class="date-field">
-                                        <span><?php echo esc_html__( 'Start', 'wordpress-courses' ); ?></span>
+                                        <span><?php echo esc_html__( 'Start', 'learn-app' ); ?></span>
                                         <input type="date" name="start_date" value="<?php echo esc_attr( $plan_dates['start_date'] ); ?>">
                                     </label>
                                     <label class="date-field">
-                                        <span><?php echo esc_html__( 'End', 'wordpress-courses' ); ?></span>
+                                        <span><?php echo esc_html__( 'End', 'learn-app' ); ?></span>
                                         <input type="date" name="end_date" value="<?php echo esc_attr( $plan_dates['end_date'] ); ?>">
                                     </label>
                                 </div>
-                                <button type="submit" class="secondary"><?php echo esc_html__( 'Save Dates', 'wordpress-courses' ); ?></button>
+                                <button type="submit" class="secondary"><?php echo esc_html__( 'Save Dates', 'learn-app' ); ?></button>
                             </form>
                         </details>
                         <?php if ( '' !== $selected_course['link'] ) : ?>
-                            <a class="button secondary" href="<?php echo esc_url( $selected_course['link'] ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html__( 'Open on Learn', 'wordpress-courses' ); ?></a>
+                            <a class="button secondary" href="<?php echo esc_url( $selected_course['link'] ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html__( 'Open on Learn', 'learn-app' ); ?></a>
                         <?php endif; ?>
                             </div>
                         <?php endif; ?>
@@ -652,7 +653,7 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
                             <div class="active-course-list">
                                 <?php foreach ( $other_plans as $plan ) : ?>
                                     <div class="active-course">
-                                        <strong><a href="<?php echo esc_url( add_query_arg( 'plan_id', $plan['id'], home_url( '/wordpress-courses/' ) ) ); ?>"><?php echo esc_html( $plan['title'] ); ?></a></strong>
+                                        <strong><a href="<?php echo esc_url( add_query_arg( 'plan_id', $plan['id'], home_url( '/learn-app/' ) ) ); ?>"><?php echo esc_html( $plan['title'] ); ?></a></strong>
                                     </div>
                                 <?php endforeach; ?>
                             </div>
@@ -662,10 +663,10 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
 
                 <?php if ( ! empty( $active_plans ) ) : ?>
                     <div class="panel">
-                        <h3><?php echo esc_html__( 'Add Course', 'wordpress-courses' ); ?></h3>
-                        <form class="search-form" method="get" action="<?php echo esc_url( home_url( '/wordpress-courses/' ) ); ?>">
-                            <input type="search" name="course_search" value="<?php echo esc_attr( $search ); ?>" placeholder="<?php echo esc_attr__( 'Search Learn WordPress courses', 'wordpress-courses' ); ?>">
-                            <button type="submit"><?php echo esc_html__( 'Search', 'wordpress-courses' ); ?></button>
+                        <h3><?php echo esc_html__( 'Add Course', 'learn-app' ); ?></h3>
+                        <form class="search-form" method="get" action="<?php echo esc_url( home_url( '/learn-app/' ) ); ?>">
+                            <input type="search" name="course_search" value="<?php echo esc_attr( $search ); ?>" placeholder="<?php echo esc_attr__( 'Search Learn WordPress courses', 'learn-app' ); ?>">
+                            <button type="submit"><?php echo esc_html__( 'Search', 'learn-app' ); ?></button>
                         </form>
                     </div>
                 <?php endif; ?>
@@ -708,7 +709,7 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
                     }
 
                     pendingRequest = new AbortController();
-                    setStatus('<?php echo esc_js( __( 'Saving...', 'wordpress-courses' ) ); ?>');
+                    setStatus('<?php echo esc_js( __( 'Saving...', 'learn-app' ) ); ?>');
 
                     fetch('<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>', {
                         method: 'POST',
@@ -730,13 +731,13 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
                             meter.style.width = response.data.lesson_progress + '%';
                         }
 
-                        setStatus('<?php echo esc_js( __( 'Saved', 'wordpress-courses' ) ); ?>');
+                        setStatus('<?php echo esc_js( __( 'Saved', 'learn-app' ) ); ?>');
                     }).catch(function(error) {
                         if ('AbortError' === error.name) {
                             return;
                         }
 
-                        setStatus('<?php echo esc_js( __( 'Could not save', 'wordpress-courses' ) ); ?>');
+                        setStatus('<?php echo esc_js( __( 'Could not save', 'learn-app' ) ); ?>');
                     });
                 }
 

@@ -1,10 +1,10 @@
 <?php
 /**
- * Plugin Name: WordPress Courses
+ * Plugin Name: WordPress Learn
  * Description: A WordPress app powered by WpApp.
  * Version: 1.0.0
  * Author: Alex Kirk
- * Text Domain: wordpress-courses
+ * Text Domain: learn-app
  * Requires PHP: 7.4
  */
 

@@ -1,7 +1,7 @@
 {
 	"$schema": "https://playground.wordpress.net/blueprint-schema.json",
 	"meta": {
-		"title": "WordPress Courses",
+		"title": "WordPress Learn",
 		"description": "A personal study helper for Learn WordPress courses with course plans, lesson checklists, dates, and progress tracking.",
 		"author": "Alex Kirk",
 		"categories": [
@@ -9,19 +9,19 @@
 			"Education"
 		]
 	},
-	"landingPage": "/wordpress-courses/",
+	"landingPage": "/learn-app/",
 	"steps": [
 		{
 			"step": "installPlugin",
 			"pluginData": {
 				"resource": "git:directory",
-				"url": "https://github.com/akirk/wordpress-courses",
+				"url": "https://github.com/akirk/learn-app",
 				"ref": "dist/main",
 				"refType": "branch"
 			},
 			"options": {
 				"activate": true,
-				"targetFolderName": "wordpress-courses"
+				"targetFolderName": "learn-app"
 			}
 		}
 	]
