@@ -4,6 +4,7 @@
  * Description: A WordPress app powered by WpApp.
  * Version: 1.0.0
  * Author: Alex Kirk
+ * Author URI: https://alex.kirk.at/
  * Text Domain: learn-app
  * Requires PHP: 7.4
  */
