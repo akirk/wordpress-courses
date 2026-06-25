@@ -156,7 +156,6 @@ $lesson_progress       = $selected_lesson_count > 0 ? (int) round( ( $completed_
 $plan_dates            = $selected_plan_id > 0 ? CoursePlans::get_plan_dates( $user_id, $selected_plan_id ) : [ 'start_date' => '', 'end_date' => '' ];
 $plan_notes_html       = $selected_plan_id > 0 ? CoursePlans::get_plan_notes( $user_id, $selected_plan_id ) : '';
 $plan_notes_editor     = $selected_plan_id > 0 ? CoursePlans::get_plan_notes_editor_text( $user_id, $selected_plan_id ) : '';
-$plan_notes_preview    = '' !== $plan_notes_html ? wp_trim_words( wp_strip_all_tags( $plan_notes_html ), 24, '...' ) : '';
 $lesson_notes          = $selected_plan_id > 0 ? CoursePlans::get_lesson_notes( $user_id, $selected_plan_id ) : [];
 $time_progress         = CoursePlans::get_time_progress_percent( $plan_dates['start_date'], $plan_dates['end_date'] );
 $days_left             = '' !== $plan_dates['end_date'] ? (int) ceil( ( strtotime( $plan_dates['end_date'] . ' 23:59:59' ) - current_time( 'timestamp' ) ) / DAY_IN_SECONDS ) : 0;
@@ -466,6 +465,15 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
             color: var(--wp-app-color-muted);
             font-size: 0.9rem;
         }
+        .note-content {
+            color: var(--wp-app-color-text);
+        }
+        .note-content > :last-child {
+            margin-bottom: 0;
+        }
+        .note-content a {
+            color: var(--wp-app-color-link);
+        }
         .course-notes-toggle {
             min-height: 28px;
             padding: 2px 0;
@@ -691,9 +699,6 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
                                                 $lesson_note_html   = $lesson_notes[ $lesson_id ] ?? '';
                                                 $lesson_note_editor = CoursePlans::get_lesson_note_editor_text( $user_id, $selected_plan_id, $lesson_id );
                                                 $lesson_note_target = 'lesson-note-' . $lesson_id;
-                                                $lesson_note_preview = '' !== $lesson_note_html
-                                                    ? wp_trim_words( wp_strip_all_tags( $lesson_note_html ), 18, '...' )
-                                                    : '';
                                                 ?>
                                                 <article class="lesson <?php echo '' !== $lesson_note_html ? 'has-note' : ''; ?>" data-lesson-note-item>
                                                     <div class="lesson-row">
@@ -711,8 +716,8 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
                                                             <?php echo esc_html( '' !== $lesson_note_html ? __( 'Edit note', 'learn-app' ) : __( 'Add note', 'learn-app' ) ); ?>
                                                         </button>
                                                     </div>
-                                                    <?php if ( '' !== $lesson_note_preview ) : ?>
-                                                        <p class="lesson-note-preview"><?php echo esc_html( $lesson_note_preview ); ?></p>
+                                                    <?php if ( '' !== $lesson_note_html ) : ?>
+                                                        <div class="lesson-note-preview note-content"><?php echo wp_kses_post( $lesson_note_html ); ?></div>
                                                     <?php endif; ?>
                                                     <form id="<?php echo esc_attr( $lesson_note_target ); ?>" class="lesson-note-form" method="post" action="<?php echo esc_url( add_query_arg( 'plan_id', $selected_plan_id, home_url( '/learn-app/' ) ) ); ?>" data-lesson-note-form hidden>
                                                         <?php wp_nonce_field( 'wordpress_courses_action', 'wordpress_courses_nonce' ); ?>
@@ -885,8 +890,8 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
                                     <?php echo esc_html( '' !== $plan_notes_html ? __( 'Edit notes', 'learn-app' ) : __( 'Add notes', 'learn-app' ) ); ?>
                                 </button>
                             </div>
-                            <?php if ( '' !== $plan_notes_preview ) : ?>
-                                <p class="course-notes-preview"><?php echo esc_html( $plan_notes_preview ); ?></p>
+                            <?php if ( '' !== $plan_notes_html ) : ?>
+                                <div class="course-notes-preview note-content"><?php echo wp_kses_post( $plan_notes_html ); ?></div>
                             <?php endif; ?>
                         </div>
                         <form id="course-notes-form" class="notes-form" method="post" action="<?php echo esc_url( add_query_arg( 'plan_id', $selected_plan_id, home_url( '/learn-app/' ) ) ); ?>" data-notes-form hidden>
