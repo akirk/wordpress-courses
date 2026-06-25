@@ -328,7 +328,7 @@ class CoursePlans {
                 return;
             }
 
-            $blocks[] = '<p>' . self::markdown_inline_to_html( implode( '<br>', $para ) ) . '</p>';
+            $blocks[] = '<p>' . self::markdown_lines_to_html( $para ) . '</p>';
             $para     = [];
         };
         $flush_list = static function () use ( &$blocks, &$list, &$ordered ): void {
@@ -352,7 +352,7 @@ class CoursePlans {
                 return;
             }
 
-            $blocks[] = '<blockquote><p>' . self::markdown_inline_to_html( implode( '<br>', $quote ) ) . '</p></blockquote>';
+            $blocks[] = '<blockquote><p>' . self::markdown_lines_to_html( $quote ) . '</p></blockquote>';
             $quote    = [];
         };
 
@@ -473,6 +473,17 @@ class CoursePlans {
         $text = preg_replace( '/(?<!_)_([^_]+)_(?!_)/', '<em>$1</em>', $text );
 
         return $text;
+    }
+
+    private static function markdown_lines_to_html( array $lines ): string {
+        $lines = array_map(
+            static function ( string $line ): string {
+                return self::markdown_inline_to_html( $line );
+            },
+            $lines
+        );
+
+        return implode( '<br>', $lines );
     }
 
     private static function content_to_editor_text( string $content ): string {
@@ -598,6 +609,7 @@ class CoursePlans {
         );
         $text = wp_strip_all_tags( $html, true );
         $text = html_entity_decode( $text, ENT_QUOTES | ENT_HTML5, get_bloginfo( 'charset' ) ?: 'UTF-8' );
+        $text = preg_replace( '/<br\s*\/?>/i', "\n", $text );
         $text = preg_replace( "/[ \t]+\n/", "\n", $text );
 
         return trim( $text );
