@@ -9,7 +9,6 @@ $search             = isset( $_GET['course_search'] ) ? sanitize_text_field( wp_
 $selected_plan_id   = isset( $_GET['plan_id'] ) ? absint( $_GET['plan_id'] ) : 0;
 $trashed_plan_id    = isset( $_GET['trashed_plan_id'] ) ? absint( $_GET['trashed_plan_id'] ) : 0;
 $selected_course_id = 0;
-$open_lesson_note_id = 0;
 $collect_lesson_ids = function ( array $modules ): array {
     $lesson_ids = [];
 
@@ -130,7 +129,6 @@ if ( 'POST' === $_SERVER['REQUEST_METHOD'] ) {
         $lesson_id           = isset( $_POST['lesson_id'] ) ? absint( $_POST['lesson_id'] ) : 0;
         $notes               = isset( $_POST['lesson_note'] ) ? wp_unslash( $_POST['lesson_note'] ) : '';
         $result              = CoursePlans::set_lesson_note( $user_id, $notes_plan_id, $lesson_id, $notes );
-        $open_lesson_note_id = $lesson_id;
 
         if ( is_wp_error( $result ) ) {
             $error = $result->get_error_message();
@@ -674,7 +672,6 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
                                                 $lesson_id          = absint( $lesson['id'] );
                                                 $lesson_note_html   = $lesson_notes[ $lesson_id ] ?? '';
                                                 $lesson_note_editor = CoursePlans::get_lesson_note_editor_text( $user_id, $selected_plan_id, $lesson_id );
-                                                $lesson_note_open   = $open_lesson_note_id === $lesson_id;
                                                 $lesson_note_target = 'lesson-note-' . $lesson_id;
                                                 $lesson_note_preview = '' !== $lesson_note_html
                                                     ? wp_trim_words( wp_strip_all_tags( $lesson_note_html ), 18, '...' )
@@ -692,14 +689,14 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
                                                                 <?php endif; ?>
                                                             </span>
                                                         </label>
-                                                        <button type="button" class="lesson-note-toggle" data-lesson-note-toggle aria-expanded="<?php echo $lesson_note_open ? 'true' : 'false'; ?>" aria-controls="<?php echo esc_attr( $lesson_note_target ); ?>">
+                                                        <button type="button" class="lesson-note-toggle" data-lesson-note-toggle aria-expanded="false" aria-controls="<?php echo esc_attr( $lesson_note_target ); ?>">
                                                             <?php echo esc_html( '' !== $lesson_note_html ? __( 'Edit note', 'learn-app' ) : __( 'Add note', 'learn-app' ) ); ?>
                                                         </button>
                                                     </div>
                                                     <?php if ( '' !== $lesson_note_preview ) : ?>
                                                         <p class="lesson-note-preview"><?php echo esc_html( $lesson_note_preview ); ?></p>
                                                     <?php endif; ?>
-                                                    <form id="<?php echo esc_attr( $lesson_note_target ); ?>" class="lesson-note-form" method="post" action="<?php echo esc_url( add_query_arg( 'plan_id', $selected_plan_id, home_url( '/learn-app/' ) ) ); ?>" data-lesson-note-form <?php echo $lesson_note_open ? '' : 'hidden'; ?>>
+                                                    <form id="<?php echo esc_attr( $lesson_note_target ); ?>" class="lesson-note-form" method="post" action="<?php echo esc_url( add_query_arg( 'plan_id', $selected_plan_id, home_url( '/learn-app/' ) ) ); ?>" data-lesson-note-form hidden>
                                                         <?php wp_nonce_field( 'wordpress_courses_action', 'wordpress_courses_nonce' ); ?>
                                                         <input type="hidden" name="wordpress_courses_action" value="save_lesson_note">
                                                         <input type="hidden" name="plan_id" value="<?php echo esc_attr( $selected_plan_id ); ?>">
