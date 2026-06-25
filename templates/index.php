@@ -124,6 +124,19 @@ if ( 'POST' === $_SERVER['REQUEST_METHOD'] ) {
             $selected_course_id = CoursePlans::get_plan_course_id( $user_id, $selected_plan_id );
             $notice             = __( 'Notes saved.', 'learn-app' );
         }
+    } elseif ( 'save_lesson_note' === $action ) {
+        $notes_plan_id       = isset( $_POST['plan_id'] ) ? absint( $_POST['plan_id'] ) : $selected_plan_id;
+        $lesson_id           = isset( $_POST['lesson_id'] ) ? absint( $_POST['lesson_id'] ) : 0;
+        $notes               = isset( $_POST['lesson_note'] ) ? wp_unslash( $_POST['lesson_note'] ) : '';
+        $result              = CoursePlans::set_lesson_note( $user_id, $notes_plan_id, $lesson_id, $notes );
+
+        if ( is_wp_error( $result ) ) {
+            $error = $result->get_error_message();
+        } else {
+            $selected_plan_id   = $notes_plan_id;
+            $selected_course_id = CoursePlans::get_plan_course_id( $user_id, $selected_plan_id );
+            $notice             = __( 'Lesson note saved.', 'learn-app' );
+        }
     }
 }
 
@@ -141,7 +154,9 @@ $selected_lesson_count = is_array( $selected_modules ) ? LearnApi::count_lessons
 $completed_count       = count( array_intersect( $completed_lesson_ids, $collect_lesson_ids( is_array( $selected_modules ) ? $selected_modules : [] ) ) );
 $lesson_progress       = $selected_lesson_count > 0 ? (int) round( ( $completed_count / $selected_lesson_count ) * 100 ) : 0;
 $plan_dates            = $selected_plan_id > 0 ? CoursePlans::get_plan_dates( $user_id, $selected_plan_id ) : [ 'start_date' => '', 'end_date' => '' ];
+$plan_notes_html       = $selected_plan_id > 0 ? CoursePlans::get_plan_notes( $user_id, $selected_plan_id ) : '';
 $plan_notes_editor     = $selected_plan_id > 0 ? CoursePlans::get_plan_notes_editor_text( $user_id, $selected_plan_id ) : '';
+$lesson_notes          = $selected_plan_id > 0 ? CoursePlans::get_lesson_notes( $user_id, $selected_plan_id ) : [];
 $time_progress         = CoursePlans::get_time_progress_percent( $plan_dates['start_date'], $plan_dates['end_date'] );
 $days_left             = '' !== $plan_dates['end_date'] ? (int) ceil( ( strtotime( $plan_dates['end_date'] . ' 23:59:59' ) - current_time( 'timestamp' ) ) / DAY_IN_SECONDS ) : 0;
 if ( $days_left > 1 ) {
@@ -171,7 +186,7 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo esc_html( wp_app_title( 'WordPress Learn' ) ); ?></title>
+    <title><?php echo esc_html( wp_app_title( 'Learn WordPress' ) ); ?></title>
     <?php wp_app_head(); ?>
     <?php if ( $selected_plan_id > 0 && $selected_course_id > 0 ) : ?>
         <script src="<?php echo esc_url( plugins_url( 'assets/vendor/overtype/overtype.min.js', dirname( __DIR__ ) . '/learn-app.php' ) ); ?>"></script>
@@ -365,28 +380,41 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
             display: grid;
             gap: 6px;
         }
+        .time-progress-row:hover .date-edit-toggle,
+        .time-progress-row:focus-within .date-edit-toggle {
+            opacity: 1;
+            pointer-events: auto;
+        }
         .progress-label {
             display: flex;
             justify-content: space-between;
             gap: 10px;
             font-size: 0.9rem;
         }
+        .time-status-actions {
+            display: inline-flex;
+            align-items: baseline;
+            gap: 8px;
+            min-width: 0;
+        }
+        .date-edit-toggle {
+            min-height: 0;
+            padding: 0;
+            border: 0;
+            background: transparent;
+            color: var(--wp-app-color-link);
+            font-size: 0.85rem;
+            opacity: 0;
+            pointer-events: none;
+            text-decoration: underline;
+        }
         .date-form {
             display: grid;
             gap: 10px;
             padding: 10px 0 0;
         }
-        .date-details {
-            padding: 12px 0;
-            border-top: 1px solid var(--wp-app-color-border);
-            border-bottom: 1px solid var(--wp-app-color-border);
-        }
-        .date-details summary {
-            cursor: pointer;
-            font-weight: 600;
-        }
-        .date-details summary::marker {
-            color: var(--wp-app-color-muted);
+        .date-form[hidden] {
+            display: none;
         }
         .date-fields {
             display: grid;
@@ -413,6 +441,47 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
             gap: 10px;
             padding-top: 12px;
             border-top: 1px solid var(--wp-app-color-border);
+        }
+        .notes-form[hidden] {
+            display: none;
+        }
+        .course-notes {
+            display: grid;
+            gap: 8px;
+            padding-top: 12px;
+            border-top: 1px solid var(--wp-app-color-border);
+        }
+        .course-notes-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+        .course-notes-header h3 {
+            margin-bottom: 0;
+        }
+        .course-notes-preview {
+            margin: 0;
+            color: var(--wp-app-color-muted);
+            font-size: 0.9rem;
+        }
+        .note-content {
+            color: var(--wp-app-color-text);
+        }
+        .note-content > :last-child {
+            margin-bottom: 0;
+        }
+        .note-content a {
+            color: var(--wp-app-color-link);
+        }
+        .course-notes-toggle {
+            min-height: 28px;
+            padding: 2px 0;
+            border: 0;
+            background: transparent;
+            color: var(--wp-app-color-link);
+            font-size: 0.85rem;
+            text-decoration: underline;
         }
         .notes-editor {
             display: none;
@@ -471,14 +540,67 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
         }
         .lesson {
             display: grid;
+            gap: 6px;
+            padding: 4px 0;
+        }
+        .lesson-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 8px;
+            align-items: center;
+        }
+        .lesson-check {
+            display: grid;
             grid-template-columns: 24px minmax(0, 1fr);
             gap: 8px;
             align-items: start;
         }
-        .lesson input { margin-top: 4px; }
+        .lesson-check input { margin-top: 4px; }
         .lesson a {
             color: var(--wp-app-color-link);
             text-decoration-thickness: 1px;
+        }
+        .lesson-note-toggle {
+            min-height: 28px;
+            padding: 2px 0;
+            border: 0;
+            background: transparent;
+            color: var(--wp-app-color-link);
+            font-size: 0.85rem;
+            opacity: 0;
+            pointer-events: none;
+            text-decoration: underline;
+        }
+        .lesson:hover .lesson-note-toggle,
+        .lesson:focus-within .lesson-note-toggle,
+        .lesson.has-note .lesson-note-toggle {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .lesson-note-preview {
+            margin: 0 0 0 32px;
+            color: var(--wp-app-color-muted);
+            font-size: 0.9rem;
+        }
+        .lesson-note-form {
+            display: grid;
+            gap: 8px;
+            margin: 4px 0 8px 32px;
+        }
+        .lesson-note-form[hidden] {
+            display: none;
+        }
+        .lesson-note-editor {
+            min-height: 130px;
+            height: clamp(130px, 22vh, 260px);
+        }
+        .lesson-note-source {
+            min-height: 130px;
+        }
+        .lesson-note-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
         }
         .actions {
             display: flex;
@@ -497,6 +619,24 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
             .course-item { grid-template-columns: 1fr; }
             .search-form { grid-template-columns: 1fr; }
             button, .button { width: 100%; }
+            .lesson-row {
+                grid-template-columns: 1fr;
+            }
+            .lesson-note-toggle {
+                width: auto;
+                justify-self: start;
+                opacity: 1;
+                pointer-events: auto;
+            }
+            .lesson-note-preview,
+            .lesson-note-form {
+                margin-left: 32px;
+            }
+            .date-edit-toggle {
+                width: auto;
+                opacity: 1;
+                pointer-events: auto;
+            }
             .notes-editor .overtype-toolbar button {
                 width: auto;
             }
@@ -509,7 +649,7 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
     <main>
         <header class="page-header">
             <div>
-                <h1><a href="<?php echo esc_url( home_url( '/learn-app/' ) ); ?>"><?php echo esc_html__( 'WordPress Learn', 'learn-app' ); ?></a></h1>
+                <h1><a href="<?php echo esc_url( home_url( '/learn-app/' ) ); ?>"><?php echo esc_html__( 'Learn WordPress', 'learn-app' ); ?></a></h1>
                 <p class="muted"><?php echo esc_html__( 'Choose the Learn WordPress course you joined and track your own study progress here.', 'learn-app' ); ?></p>
             </div>
         </header>
@@ -545,11 +685,7 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
                         <?php elseif ( empty( $selected_modules ) ) : ?>
                             <p class="muted"><?php echo esc_html__( 'No lessons were found for this course yet.', 'learn-app' ); ?></p>
                         <?php else : ?>
-                            <form id="course-progress-form" method="post" action="<?php echo esc_url( add_query_arg( 'plan_id', $selected_plan_id, home_url( '/learn-app/' ) ) ); ?>" data-plan-id="<?php echo esc_attr( $selected_plan_id ); ?>">
-                                <?php wp_nonce_field( 'wordpress_courses_action', 'wordpress_courses_nonce' ); ?>
-                                <input type="hidden" name="wordpress_courses_action" value="save_progress">
-                                <input type="hidden" name="plan_id" value="<?php echo esc_attr( $selected_plan_id ); ?>">
-
+                            <div id="course-progress-form" data-plan-id="<?php echo esc_attr( $selected_plan_id ); ?>">
                                 <?php foreach ( $selected_modules as $module ) : ?>
                                     <section class="module">
                                         <h3><?php echo esc_html( $module['title'] ); ?></h3>
@@ -558,16 +694,44 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
                                         <?php endif; ?>
                                         <div class="lesson-list">
                                             <?php foreach ( $module['lessons'] as $lesson ) : ?>
-                                                <label class="lesson">
-                                                    <input type="checkbox" name="completed_lessons[]" value="<?php echo esc_attr( $lesson['id'] ); ?>" <?php checked( in_array( $lesson['id'], $completed_lesson_ids, true ) ); ?>>
-                                                    <span>
-                                                        <?php if ( '' !== $lesson['link'] ) : ?>
-                                                            <a href="<?php echo esc_url( $lesson['link'] ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( $lesson['title'] ); ?></a>
-                                                        <?php else : ?>
-                                                            <?php echo esc_html( $lesson['title'] ); ?>
-                                                        <?php endif; ?>
-                                                    </span>
-                                                </label>
+                                                <?php
+                                                $lesson_id          = absint( $lesson['id'] );
+                                                $lesson_note_html   = $lesson_notes[ $lesson_id ] ?? '';
+                                                $lesson_note_editor = CoursePlans::get_lesson_note_editor_text( $user_id, $selected_plan_id, $lesson_id );
+                                                $lesson_note_target = 'lesson-note-' . $lesson_id;
+                                                ?>
+                                                <article class="lesson <?php echo '' !== $lesson_note_html ? 'has-note' : ''; ?>" data-lesson-note-item>
+                                                    <div class="lesson-row">
+                                                        <label class="lesson-check">
+                                                            <input type="checkbox" name="completed_lessons[]" value="<?php echo esc_attr( $lesson_id ); ?>" <?php checked( in_array( $lesson_id, $completed_lesson_ids, true ) ); ?>>
+                                                            <span>
+                                                                <?php if ( '' !== $lesson['link'] ) : ?>
+                                                                    <a href="<?php echo esc_url( $lesson['link'] ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( $lesson['title'] ); ?></a>
+                                                                <?php else : ?>
+                                                                    <?php echo esc_html( $lesson['title'] ); ?>
+                                                                <?php endif; ?>
+                                                            </span>
+                                                        </label>
+                                                        <button type="button" class="lesson-note-toggle" data-lesson-note-toggle aria-expanded="false" aria-controls="<?php echo esc_attr( $lesson_note_target ); ?>">
+                                                            <?php echo esc_html( '' !== $lesson_note_html ? __( 'Edit note', 'learn-app' ) : __( 'Add note', 'learn-app' ) ); ?>
+                                                        </button>
+                                                    </div>
+                                                    <?php if ( '' !== $lesson_note_html ) : ?>
+                                                        <div class="lesson-note-preview note-content"><?php echo wp_kses_post( $lesson_note_html ); ?></div>
+                                                    <?php endif; ?>
+                                                    <form id="<?php echo esc_attr( $lesson_note_target ); ?>" class="lesson-note-form" method="post" action="<?php echo esc_url( add_query_arg( 'plan_id', $selected_plan_id, home_url( '/learn-app/' ) ) ); ?>" data-lesson-note-form hidden>
+                                                        <?php wp_nonce_field( 'wordpress_courses_action', 'wordpress_courses_nonce' ); ?>
+                                                        <input type="hidden" name="wordpress_courses_action" value="save_lesson_note">
+                                                        <input type="hidden" name="plan_id" value="<?php echo esc_attr( $selected_plan_id ); ?>">
+                                                        <input type="hidden" name="lesson_id" value="<?php echo esc_attr( $lesson_id ); ?>">
+                                                        <div class="notes-editor lesson-note-editor" data-notes-editor></div>
+                                                        <textarea class="notes-source lesson-note-source" name="lesson_note" rows="5" data-notes-source aria-label="<?php echo esc_attr__( 'Lesson note markdown', 'learn-app' ); ?>" placeholder="<?php echo esc_attr__( 'Add a note for this lesson.', 'learn-app' ); ?>"><?php echo esc_textarea( $lesson_note_editor ); ?></textarea>
+                                                        <div class="lesson-note-actions">
+                                                            <button type="submit" class="secondary"><?php echo esc_html__( 'Save Note', 'learn-app' ); ?></button>
+                                                            <button type="button" class="secondary" data-lesson-note-cancel><?php echo esc_html__( 'Cancel', 'learn-app' ); ?></button>
+                                                        </div>
+                                                    </form>
+                                                </article>
                                             <?php endforeach; ?>
                                         </div>
                                     </section>
@@ -576,7 +740,7 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
                                 <div class="actions">
                                     <span class="save-status" data-save-status></span>
                                 </div>
-                            </form>
+                            </div>
                         <?php endif; ?>
                     </div>
                 <?php endif; ?>
@@ -634,7 +798,6 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
                                                 <p class="muted"><?php echo esc_html( $course['excerpt'] ); ?></p>
                                             <?php endif; ?>
                                             <div class="course-meta">
-                                                <span><?php echo esc_html( sprintf( __( 'Learn ID: %d', 'learn-app' ), $course['id'] ) ); ?></span>
                                                 <?php if ( $course['duration'] > 0 ) : ?>
                                                     <span><?php echo esc_html( sprintf( __( 'Estimated %.1f hours', 'learn-app' ), $course['duration'] ) ); ?></span>
                                                 <?php endif; ?>
@@ -686,42 +849,60 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
                                 <span style="width: <?php echo esc_attr( $lesson_progress ); ?>%"></span>
                             </div>
                         </div>
-                        <div class="progress-row">
+                        <div class="progress-row time-progress-row">
                             <div class="progress-label">
-                                <span><?php echo esc_html( $time_status ); ?></span>
+                                <span class="time-status-actions">
+                                    <span><?php echo esc_html( $time_status ); ?></span>
+                                    <button type="button" class="date-edit-toggle" data-date-toggle aria-expanded="false" aria-controls="course-dates-form">
+                                        <?php echo esc_html__( 'Edit dates', 'learn-app' ); ?>
+                                    </button>
+                                </span>
                                 <span><?php echo esc_html( sprintf( __( '%d%%', 'learn-app' ), $time_progress ) ); ?></span>
                             </div>
                             <div class="progress-meter time" aria-hidden="true">
                                 <span style="width: <?php echo esc_attr( $time_progress ); ?>%"></span>
                             </div>
                         </div>
-                        <details class="date-details">
-                            <summary><?php echo esc_html__( 'Edit Dates', 'learn-app' ); ?></summary>
-                            <form class="date-form" method="post" action="<?php echo esc_url( add_query_arg( 'plan_id', $selected_plan_id, home_url( '/learn-app/' ) ) ); ?>">
-                                <?php wp_nonce_field( 'wordpress_courses_action', 'wordpress_courses_nonce' ); ?>
-                                <input type="hidden" name="wordpress_courses_action" value="save_dates">
-                                <input type="hidden" name="plan_id" value="<?php echo esc_attr( $selected_plan_id ); ?>">
-                                <div class="date-fields">
-                                    <label class="date-field">
-                                        <span><?php echo esc_html__( 'Start', 'learn-app' ); ?></span>
-                                        <input type="date" name="start_date" value="<?php echo esc_attr( $plan_dates['start_date'] ); ?>">
-                                    </label>
-                                    <label class="date-field">
-                                        <span><?php echo esc_html__( 'End', 'learn-app' ); ?></span>
-                                        <input type="date" name="end_date" value="<?php echo esc_attr( $plan_dates['end_date'] ); ?>">
-                                    </label>
-                                </div>
+                        <form id="course-dates-form" class="date-form" method="post" action="<?php echo esc_url( add_query_arg( 'plan_id', $selected_plan_id, home_url( '/learn-app/' ) ) ); ?>" hidden>
+                            <?php wp_nonce_field( 'wordpress_courses_action', 'wordpress_courses_nonce' ); ?>
+                            <input type="hidden" name="wordpress_courses_action" value="save_dates">
+                            <input type="hidden" name="plan_id" value="<?php echo esc_attr( $selected_plan_id ); ?>">
+                            <div class="date-fields">
+                                <label class="date-field">
+                                    <span><?php echo esc_html__( 'Start', 'learn-app' ); ?></span>
+                                    <input type="date" name="start_date" value="<?php echo esc_attr( $plan_dates['start_date'] ); ?>">
+                                </label>
+                                <label class="date-field">
+                                    <span><?php echo esc_html__( 'End', 'learn-app' ); ?></span>
+                                    <input type="date" name="end_date" value="<?php echo esc_attr( $plan_dates['end_date'] ); ?>">
+                                </label>
+                            </div>
+                            <div class="lesson-note-actions">
                                 <button type="submit" class="secondary"><?php echo esc_html__( 'Save Dates', 'learn-app' ); ?></button>
-                            </form>
-                        </details>
-                        <form class="notes-form" method="post" action="<?php echo esc_url( add_query_arg( 'plan_id', $selected_plan_id, home_url( '/learn-app/' ) ) ); ?>" data-notes-form>
+                                <button type="button" class="secondary" data-date-cancel><?php echo esc_html__( 'Cancel', 'learn-app' ); ?></button>
+                            </div>
+                        </form>
+                        <div class="course-notes">
+                            <div class="course-notes-header">
+                                <h3><?php echo esc_html__( 'Notes', 'learn-app' ); ?></h3>
+                                <button type="button" class="course-notes-toggle" data-course-notes-toggle aria-expanded="false" aria-controls="course-notes-form">
+                                    <?php echo esc_html( '' !== $plan_notes_html ? __( 'Edit notes', 'learn-app' ) : __( 'Add notes', 'learn-app' ) ); ?>
+                                </button>
+                            </div>
+                            <?php if ( '' !== $plan_notes_html ) : ?>
+                                <div class="course-notes-preview note-content"><?php echo wp_kses_post( $plan_notes_html ); ?></div>
+                            <?php endif; ?>
+                        </div>
+                        <form id="course-notes-form" class="notes-form" method="post" action="<?php echo esc_url( add_query_arg( 'plan_id', $selected_plan_id, home_url( '/learn-app/' ) ) ); ?>" data-notes-form hidden>
                             <?php wp_nonce_field( 'wordpress_courses_action', 'wordpress_courses_nonce' ); ?>
                             <input type="hidden" name="wordpress_courses_action" value="save_notes">
                             <input type="hidden" name="plan_id" value="<?php echo esc_attr( $selected_plan_id ); ?>">
-                            <h3><?php echo esc_html__( 'Notes', 'learn-app' ); ?></h3>
                             <div class="notes-editor" data-notes-editor></div>
                             <textarea class="notes-source" name="notes" rows="8" data-notes-source aria-label="<?php echo esc_attr__( 'Course notes markdown', 'learn-app' ); ?>" placeholder="<?php echo esc_attr__( 'Add notes for this course.', 'learn-app' ); ?>"><?php echo esc_textarea( $plan_notes_editor ); ?></textarea>
-                            <button type="submit" class="secondary"><?php echo esc_html__( 'Save Notes', 'learn-app' ); ?></button>
+                            <div class="lesson-note-actions">
+                                <button type="submit" class="secondary"><?php echo esc_html__( 'Save Notes', 'learn-app' ); ?></button>
+                                <button type="button" class="secondary" data-course-notes-cancel><?php echo esc_html__( 'Cancel', 'learn-app' ); ?></button>
+                            </div>
                         </form>
                         <?php if ( '' !== $selected_course['link'] ) : ?>
                             <a class="button secondary" href="<?php echo esc_url( $selected_course['link'] ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html__( 'Open on Learn', 'learn-app' ); ?></a>

@@ -123,8 +123,7 @@
 		});
 	}
 
-	function initNotesEditor() {
-		var form = document.querySelector('[data-notes-form]');
+	function initNotesEditor(form) {
 		if (!form) {
 			return;
 		}
@@ -170,8 +169,9 @@
 			},
 		};
 
+		var isLessonNote = source.classList.contains('lesson-note-source');
 		var editors = new window.OverType(host, {
-			value: source.value.replace(/\s*$/, '\n\n'),
+			value: source.value,
 			theme: theme,
 			toolbar: true,
 			toolbarButtons: markdownToolbarButtons(),
@@ -180,8 +180,8 @@
 			spellcheck: true,
 			fontSize: '14px',
 			lineHeight: 1.55,
-			minHeight: '170px',
-			maxHeight: '360px',
+			minHeight: isLessonNote ? '130px' : '170px',
+			maxHeight: isLessonNote ? '260px' : '360px',
 			textareaProps: {
 				'aria-label': source.getAttribute('aria-label') || 'Course notes markdown',
 			},
@@ -214,9 +214,142 @@
 		});
 	}
 
+	function initVisibleNotesEditors() {
+		var forms = document.querySelectorAll('[data-notes-form], [data-lesson-note-form]');
+		Array.prototype.forEach.call(forms, function (form) {
+			if (!form.hidden) {
+				initNotesEditor(form);
+			}
+		});
+	}
+
+	function focusNotesForm(form) {
+		window.setTimeout(function () {
+			var editorTextarea = form.querySelector('.overtype-input');
+			var source = form.querySelector('textarea[data-notes-source]');
+			var focusTarget = editorTextarea || source;
+
+			if (focusTarget) {
+				focusTarget.focus();
+			}
+		}, 0);
+	}
+
+	function setupLessonNoteToggles() {
+		var toggles = document.querySelectorAll('[data-lesson-note-toggle]');
+		Array.prototype.forEach.call(toggles, function (toggle) {
+			var targetId = toggle.getAttribute('aria-controls');
+			var form = targetId ? document.getElementById(targetId) : null;
+			var item = toggle.closest('[data-lesson-note-item]');
+
+			if (!form) {
+				return;
+			}
+
+			toggle.addEventListener('click', function () {
+				var shouldOpen = form.hidden;
+				form.hidden = !shouldOpen;
+				toggle.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+
+				if (shouldOpen) {
+					initNotesEditor(form);
+					focusNotesForm(form);
+				}
+			});
+
+			var cancel = form.querySelector('[data-lesson-note-cancel]');
+			if (cancel) {
+				cancel.addEventListener('click', function () {
+					form.hidden = true;
+					toggle.setAttribute('aria-expanded', 'false');
+					toggle.focus();
+				});
+			}
+
+			if (item && !form.hidden) {
+				toggle.setAttribute('aria-expanded', 'true');
+			}
+		});
+	}
+
+	function setupCourseNotesToggle() {
+		var toggle = document.querySelector('[data-course-notes-toggle]');
+		if (!toggle) {
+			return;
+		}
+
+		var targetId = toggle.getAttribute('aria-controls');
+		var form = targetId ? document.getElementById(targetId) : null;
+		if (!form) {
+			return;
+		}
+
+		toggle.addEventListener('click', function () {
+			var shouldOpen = form.hidden;
+			form.hidden = !shouldOpen;
+			toggle.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+
+			if (shouldOpen) {
+				initNotesEditor(form);
+				focusNotesForm(form);
+			}
+		});
+
+		var cancel = form.querySelector('[data-course-notes-cancel]');
+		if (cancel) {
+			cancel.addEventListener('click', function () {
+				form.hidden = true;
+				toggle.setAttribute('aria-expanded', 'false');
+				toggle.focus();
+			});
+		}
+	}
+
+	function setupDateToggle() {
+		var toggle = document.querySelector('[data-date-toggle]');
+		if (!toggle) {
+			return;
+		}
+
+		var targetId = toggle.getAttribute('aria-controls');
+		var form = targetId ? document.getElementById(targetId) : null;
+		if (!form) {
+			return;
+		}
+
+		toggle.addEventListener('click', function () {
+			var shouldOpen = form.hidden;
+			form.hidden = !shouldOpen;
+			toggle.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+
+			if (shouldOpen) {
+				var startDate = form.querySelector('input[name="start_date"]');
+				if (startDate) {
+					startDate.focus();
+				}
+			}
+		});
+
+		var cancel = form.querySelector('[data-date-cancel]');
+		if (cancel) {
+			cancel.addEventListener('click', function () {
+				form.hidden = true;
+				toggle.setAttribute('aria-expanded', 'false');
+				toggle.focus();
+			});
+		}
+	}
+
+	function init() {
+		setupDateToggle();
+		setupCourseNotesToggle();
+		setupLessonNoteToggles();
+		initVisibleNotesEditors();
+	}
+
 	if (document.readyState === 'loading') {
-		document.addEventListener('DOMContentLoaded', initNotesEditor);
+		document.addEventListener('DOMContentLoaded', init);
 	} else {
-		initNotesEditor();
+		init();
 	}
 })();

@@ -1,4 +1,4 @@
-# WordPress Learn App
+# Learn WordPress App
 
 A personal study helper for [Learn WordPress](https://learn.wordpress.org/) courses. It runs as a WpApp at `/learn-app/` and stores each student's course plans in WordPress.
 
@@ -29,7 +29,7 @@ cd learn-app
 composer install
 ```
 
-Activate **WordPress Learn** in WordPress and visit `/learn-app/`.
+Activate **Learn WordPress** in WordPress and visit `/learn-app/`.
 
 ## Usage
 

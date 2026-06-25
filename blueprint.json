@@ -1,7 +1,7 @@
 {
 	"$schema": "https://playground.wordpress.net/blueprint-schema.json",
 	"meta": {
-		"title": "WordPress Learn",
+		"title": "Learn WordPress",
 		"description": "A personal study helper for Learn WordPress courses with course plans, lesson checklists, dates, and progress tracking.",
 		"author": "Alex Kirk",
 		"categories": [

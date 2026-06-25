@@ -8,6 +8,7 @@ class CoursePlans {
     private const COMPLETED_LESSONS_META_KEY = '_wordpress_courses_completed_lesson_ids';
     private const START_DATE_META_KEY = '_wordpress_courses_start_date';
     private const END_DATE_META_KEY = '_wordpress_courses_end_date';
+    private const LESSON_NOTES_META_KEY = '_wordpress_courses_lesson_notes';
 
     public static function register_post_type(): void {
         register_post_type(
@@ -172,6 +173,61 @@ class CoursePlans {
         return true;
     }
 
+    public static function get_lesson_notes( int $user_id, int $plan_id ): array {
+        if ( ! self::user_can_use_plan( $user_id, $plan_id ) ) {
+            return [];
+        }
+
+        $notes = get_post_meta( $plan_id, self::LESSON_NOTES_META_KEY, true );
+
+        if ( ! is_array( $notes ) ) {
+            return [];
+        }
+
+        $normalized = [];
+
+        foreach ( $notes as $lesson_id => $note ) {
+            $lesson_id = absint( $lesson_id );
+
+            if ( $lesson_id <= 0 || ! is_string( $note ) || '' === trim( $note ) ) {
+                continue;
+            }
+
+            $normalized[ $lesson_id ] = wp_kses_post( $note );
+        }
+
+        return $normalized;
+    }
+
+    public static function get_lesson_note_editor_text( int $user_id, int $plan_id, int $lesson_id ): string {
+        $notes = self::get_lesson_notes( $user_id, $plan_id );
+
+        return isset( $notes[ $lesson_id ] ) ? self::content_to_editor_text( $notes[ $lesson_id ] ) : '';
+    }
+
+    public static function set_lesson_note( int $user_id, int $plan_id, int $lesson_id, string $note ) {
+        if ( $lesson_id <= 0 || ! self::user_can_use_plan( $user_id, $plan_id ) ) {
+            return new \WP_Error( 'invalid_lesson_note', __( 'You cannot edit that lesson note.', 'learn-app' ) );
+        }
+
+        $notes     = self::get_lesson_notes( $user_id, $plan_id );
+        $note_html = self::markdown_to_html( $note );
+
+        if ( '' === $note_html ) {
+            unset( $notes[ $lesson_id ] );
+        } else {
+            $notes[ $lesson_id ] = wp_kses_post( $note_html );
+        }
+
+        if ( [] === $notes ) {
+            delete_post_meta( $plan_id, self::LESSON_NOTES_META_KEY );
+        } else {
+            update_post_meta( $plan_id, self::LESSON_NOTES_META_KEY, $notes );
+        }
+
+        return true;
+    }
+
     public static function trash_plan( int $user_id, int $plan_id ): void {
         if ( self::user_can_use_plan( $user_id, $plan_id ) ) {
             wp_trash_post( $plan_id );
@@ -272,7 +328,7 @@ class CoursePlans {
                 return;
             }
 
-            $blocks[] = '<p>' . self::markdown_inline_to_html( implode( '<br>', $para ) ) . '</p>';
+            $blocks[] = '<p>' . self::markdown_lines_to_html( $para ) . '</p>';
             $para     = [];
         };
         $flush_list = static function () use ( &$blocks, &$list, &$ordered ): void {
@@ -296,7 +352,7 @@ class CoursePlans {
                 return;
             }
 
-            $blocks[] = '<blockquote><p>' . self::markdown_inline_to_html( implode( '<br>', $quote ) ) . '</p></blockquote>';
+            $blocks[] = '<blockquote><p>' . self::markdown_lines_to_html( $quote ) . '</p></blockquote>';
             $quote    = [];
         };
 
@@ -417,6 +473,17 @@ class CoursePlans {
         $text = preg_replace( '/(?<!_)_([^_]+)_(?!_)/', '<em>$1</em>', $text );
 
         return $text;
+    }
+
+    private static function markdown_lines_to_html( array $lines ): string {
+        $lines = array_map(
+            static function ( string $line ): string {
+                return self::markdown_inline_to_html( $line );
+            },
+            $lines
+        );
+
+        return implode( '<br>', $lines );
     }
 
     private static function content_to_editor_text( string $content ): string {
@@ -542,6 +609,7 @@ class CoursePlans {
         );
         $text = wp_strip_all_tags( $html, true );
         $text = html_entity_decode( $text, ENT_QUOTES | ENT_HTML5, get_bloginfo( 'charset' ) ?: 'UTF-8' );
+        $text = preg_replace( '/<br\s*\/?>/i', "\n", $text );
         $text = preg_replace( "/[ \t]+\n/", "\n", $text );
 
         return trim( $text );
