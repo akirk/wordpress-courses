@@ -798,7 +798,6 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
                                                 <p class="muted"><?php echo esc_html( $course['excerpt'] ); ?></p>
                                             <?php endif; ?>
                                             <div class="course-meta">
-                                                <span><?php echo esc_html( sprintf( __( 'Learn ID: %d', 'learn-app' ), $course['id'] ) ); ?></span>
                                                 <?php if ( $course['duration'] > 0 ) : ?>
                                                     <span><?php echo esc_html( sprintf( __( 'Estimated %.1f hours', 'learn-app' ), $course['duration'] ) ); ?></span>
                                                 <?php endif; ?>
