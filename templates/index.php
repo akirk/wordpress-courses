@@ -381,28 +381,41 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
             display: grid;
             gap: 6px;
         }
+        .time-progress-row:hover .date-edit-toggle,
+        .time-progress-row:focus-within .date-edit-toggle {
+            opacity: 1;
+            pointer-events: auto;
+        }
         .progress-label {
             display: flex;
             justify-content: space-between;
             gap: 10px;
             font-size: 0.9rem;
         }
+        .time-status-actions {
+            display: inline-flex;
+            align-items: baseline;
+            gap: 8px;
+            min-width: 0;
+        }
+        .date-edit-toggle {
+            min-height: 0;
+            padding: 0;
+            border: 0;
+            background: transparent;
+            color: var(--wp-app-color-link);
+            font-size: 0.85rem;
+            opacity: 0;
+            pointer-events: none;
+            text-decoration: underline;
+        }
         .date-form {
             display: grid;
             gap: 10px;
             padding: 10px 0 0;
         }
-        .date-details {
-            padding: 12px 0;
-            border-top: 1px solid var(--wp-app-color-border);
-            border-bottom: 1px solid var(--wp-app-color-border);
-        }
-        .date-details summary {
-            cursor: pointer;
-            font-weight: 600;
-        }
-        .date-details summary::marker {
-            color: var(--wp-app-color-muted);
+        .date-form[hidden] {
+            display: none;
         }
         .date-fields {
             display: grid;
@@ -610,6 +623,11 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
             .lesson-note-preview,
             .lesson-note-form {
                 margin-left: 32px;
+            }
+            .date-edit-toggle {
+                width: auto;
+                opacity: 1;
+                pointer-events: auto;
             }
             .notes-editor .overtype-toolbar button {
                 width: auto;
@@ -827,34 +845,39 @@ $show_sidebar          = '' === $search && ( $selected_course_id > 0 || ! empty(
                                 <span style="width: <?php echo esc_attr( $lesson_progress ); ?>%"></span>
                             </div>
                         </div>
-                        <div class="progress-row">
+                        <div class="progress-row time-progress-row">
                             <div class="progress-label">
-                                <span><?php echo esc_html( $time_status ); ?></span>
+                                <span class="time-status-actions">
+                                    <span><?php echo esc_html( $time_status ); ?></span>
+                                    <button type="button" class="date-edit-toggle" data-date-toggle aria-expanded="false" aria-controls="course-dates-form">
+                                        <?php echo esc_html__( 'Edit dates', 'learn-app' ); ?>
+                                    </button>
+                                </span>
                                 <span><?php echo esc_html( sprintf( __( '%d%%', 'learn-app' ), $time_progress ) ); ?></span>
                             </div>
                             <div class="progress-meter time" aria-hidden="true">
                                 <span style="width: <?php echo esc_attr( $time_progress ); ?>%"></span>
                             </div>
                         </div>
-                        <details class="date-details">
-                            <summary><?php echo esc_html__( 'Edit Dates', 'learn-app' ); ?></summary>
-                            <form class="date-form" method="post" action="<?php echo esc_url( add_query_arg( 'plan_id', $selected_plan_id, home_url( '/learn-app/' ) ) ); ?>">
-                                <?php wp_nonce_field( 'wordpress_courses_action', 'wordpress_courses_nonce' ); ?>
-                                <input type="hidden" name="wordpress_courses_action" value="save_dates">
-                                <input type="hidden" name="plan_id" value="<?php echo esc_attr( $selected_plan_id ); ?>">
-                                <div class="date-fields">
-                                    <label class="date-field">
-                                        <span><?php echo esc_html__( 'Start', 'learn-app' ); ?></span>
-                                        <input type="date" name="start_date" value="<?php echo esc_attr( $plan_dates['start_date'] ); ?>">
-                                    </label>
-                                    <label class="date-field">
-                                        <span><?php echo esc_html__( 'End', 'learn-app' ); ?></span>
-                                        <input type="date" name="end_date" value="<?php echo esc_attr( $plan_dates['end_date'] ); ?>">
-                                    </label>
-                                </div>
+                        <form id="course-dates-form" class="date-form" method="post" action="<?php echo esc_url( add_query_arg( 'plan_id', $selected_plan_id, home_url( '/learn-app/' ) ) ); ?>" hidden>
+                            <?php wp_nonce_field( 'wordpress_courses_action', 'wordpress_courses_nonce' ); ?>
+                            <input type="hidden" name="wordpress_courses_action" value="save_dates">
+                            <input type="hidden" name="plan_id" value="<?php echo esc_attr( $selected_plan_id ); ?>">
+                            <div class="date-fields">
+                                <label class="date-field">
+                                    <span><?php echo esc_html__( 'Start', 'learn-app' ); ?></span>
+                                    <input type="date" name="start_date" value="<?php echo esc_attr( $plan_dates['start_date'] ); ?>">
+                                </label>
+                                <label class="date-field">
+                                    <span><?php echo esc_html__( 'End', 'learn-app' ); ?></span>
+                                    <input type="date" name="end_date" value="<?php echo esc_attr( $plan_dates['end_date'] ); ?>">
+                                </label>
+                            </div>
+                            <div class="lesson-note-actions">
                                 <button type="submit" class="secondary"><?php echo esc_html__( 'Save Dates', 'learn-app' ); ?></button>
-                            </form>
-                        </details>
+                                <button type="button" class="secondary" data-date-cancel><?php echo esc_html__( 'Cancel', 'learn-app' ); ?></button>
+                            </div>
+                        </form>
                         <div class="course-notes">
                             <div class="course-notes-header">
                                 <h3><?php echo esc_html__( 'Notes', 'learn-app' ); ?></h3>

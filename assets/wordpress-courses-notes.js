@@ -305,7 +305,43 @@
 		}
 	}
 
+	function setupDateToggle() {
+		var toggle = document.querySelector('[data-date-toggle]');
+		if (!toggle) {
+			return;
+		}
+
+		var targetId = toggle.getAttribute('aria-controls');
+		var form = targetId ? document.getElementById(targetId) : null;
+		if (!form) {
+			return;
+		}
+
+		toggle.addEventListener('click', function () {
+			var shouldOpen = form.hidden;
+			form.hidden = !shouldOpen;
+			toggle.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+
+			if (shouldOpen) {
+				var startDate = form.querySelector('input[name="start_date"]');
+				if (startDate) {
+					startDate.focus();
+				}
+			}
+		});
+
+		var cancel = form.querySelector('[data-date-cancel]');
+		if (cancel) {
+			cancel.addEventListener('click', function () {
+				form.hidden = true;
+				toggle.setAttribute('aria-expanded', 'false');
+				toggle.focus();
+			});
+		}
+	}
+
 	function init() {
+		setupDateToggle();
 		setupCourseNotesToggle();
 		setupLessonNoteToggles();
 		initVisibleNotesEditors();
