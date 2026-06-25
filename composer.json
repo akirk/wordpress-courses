@@ -1,6 +1,6 @@
 {
     "name": "akirk/learn-app",
-    "description": "WordPress Learn - A WordPress app powered by WpApp",
+    "description": "Learn WordPress - A WordPress app powered by WpApp",
     "type": "wordpress-plugin",
     "license": "GPL-2.0-or-later",
     "require": {

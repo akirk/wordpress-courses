@@ -42,12 +42,12 @@ class App extends BaseApp {
 
     protected function get_plugin_name(): string {
         if ( ! function_exists( 'get_file_data' ) ) {
-            return 'WordPress Learn';
+            return 'Learn WordPress';
         }
 
         $plugin_data = get_file_data( dirname( __DIR__ ) . '/learn-app.php', [ 'name' => 'Plugin Name' ] );
 
-        return $plugin_data['name'] ?: 'WordPress Learn';
+        return $plugin_data['name'] ?: 'Learn WordPress';
     }
 
     protected function setup_database(): void {}

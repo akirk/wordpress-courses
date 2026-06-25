@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: WordPress Learn
+ * Plugin Name: Learn WordPress
  * Description: A WordPress app powered by WpApp.
  * Version: 1.0.0
  * Author: Alex Kirk
